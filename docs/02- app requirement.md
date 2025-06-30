@@ -21,6 +21,12 @@ The app enables users in Toronto and Vancouver to query public transit informati
 ## 2. Functional Requirements
 
 ### 2.1 Core Features
+
+1. **Nearby Routes**:
+    - Home screen:
+    - Display nearby routes based on user location, with option to filter by city (Toronto or Vancouver).
+    - 显示城市地图，列出附近的公交路线，以距离的远近排序
+
 1. **Route Search**:
    - Users input a route number or transit name (e.g., “501 Queen” for TTC, “99 B-Line” for TransLink).
    - Display route details, including:

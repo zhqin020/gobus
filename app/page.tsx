@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import dynamic from "next/dynamic"
 import {
   Search,
   MapPin,
@@ -17,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import "leaflet/dist/leaflet.css"
 
 // Mock data for transit routes
 const mockRoutes = [
@@ -103,10 +105,29 @@ const mockSubwayStations = [
   },
 ]
 
+const MapView = dynamic(() => import("@/components/MapView"), { ssr: false })
+
 export default function TransitApp() {
   const [currentView, setCurrentView] = useState<"home" | "search" | "route" | "stops" | "arrivals" | "subway">("home")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedRoute, setSelectedRoute] = useState<any>(null)
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+
+  // 获取用户当前位置
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          })
+        },
+        () => {},
+        { enableHighAccuracy: true }
+      )
+    }
+  }, [])
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
@@ -126,36 +147,17 @@ export default function TransitApp() {
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Map Area */}
       <div className="relative h-96 bg-gray-800 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-gray-700 to-gray-800">
-          <div className="absolute top-4 left-4 flex items-center gap-2">
-            <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center">
-              <MapPin className="w-6 h-6 text-yellow-400" />
-            </div>
-            <Settings className="w-6 h-6 text-gray-400" />
+        {userLocation ? (
+          <MapView userLocation={userLocation} />
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-400">Loading map...</div>
+        )}
+        {/* 右上角设置按钮等可保留 */}
+        <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
+          <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center">
+            <MapPin className="w-6 h-6 text-yellow-400" />
           </div>
-
-          {/* Home marker */}
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-            <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center">
-              <Home className="w-6 h-6 text-white" />
-            </div>
-          </div>
-
-          <div className="absolute bottom-4 left-4 right-4">
-            <div className="bg-green-600 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <Search className="w-5 h-5 text-white" />
-                <Input
-                  placeholder="Where to?"
-                  className="bg-transparent border-none text-white placeholder-green-100 text-lg"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && handleSearch(searchQuery)}
-                />
-                <div className="text-white text-sm">126 min</div>
-              </div>
-            </div>
-          </div>
+          <Settings className="w-6 h-6 text-gray-400" />
         </div>
       </div>
 
