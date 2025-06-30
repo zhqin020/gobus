@@ -3,7 +3,8 @@
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
-import { useEffect } from "react"
+import { useEffect, useRef, forwardRef, useImperativeHandle } from "react"
+import type { Map as LeafletMap } from 'leaflet';
 
 // 修复默认 marker 图标丢失
 const DefaultIcon = L.icon({
@@ -20,7 +21,23 @@ if (typeof window !== "undefined") {
   L.Marker.prototype.options.icon = DefaultIcon
 }
 
-export default function MapView({ userLocation }: { userLocation: { lat: number; lng: number } }) {
+const MapView = forwardRef<
+  { recenter: () => void } | undefined,
+  { userLocation: { lat: number; lng: number } }
+>(function MapView(
+  { userLocation },
+  ref
+) {
+  const mapRef = useRef<LeafletMap | null>(null)
+
+  useImperativeHandle(ref, () => ({
+    recenter: () => {
+      if (mapRef.current) {
+        mapRef.current.setView(userLocation, 14)
+      }
+    }
+  }))
+
   useEffect(() => {
     // 仅用于触发 marker icon 修复
   }, [])
@@ -31,6 +48,7 @@ export default function MapView({ userLocation }: { userLocation: { lat: number;
       zoom={14}
       style={{ width: "100%", height: "100%", zIndex: 1 }}
       scrollWheelZoom={false}
+      whenCreated={(mapInstance: LeafletMap) => { mapRef.current = mapInstance }}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -41,4 +59,6 @@ export default function MapView({ userLocation }: { userLocation: { lat: number;
       </Marker>
     </MapContainer>
   )
-}
+})
+
+export default MapView

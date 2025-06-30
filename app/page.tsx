@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import dynamic from "next/dynamic"
 import {
   Search,
@@ -21,89 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import "leaflet/dist/leaflet.css"
 
 // Mock data for transit routes
-const mockRoutes = [
-  {
-    id: "404",
-    name: "Four Road",
-    destination: "Granville Ave / Bridge St Eastbound",
-    time: "41 minutes",
-    type: "bus",
-  },
-  {
-    id: "408",
-    name: "Riverport",
-    destinations: ["Riverport", "Ironwood"],
-    times: ["7 min", "23:50", "00:55"],
-    description: "Garden City Rd / Bennett Rd Southbound",
-    type: "bus",
-  },
-  {
-    id: "410",
-    name: "22nd St Station",
-    time: "15 minutes",
-    type: "bus",
-  },
-  {
-    id: "119",
-    name: "TransLink",
-    destination: "Edmonds Station / Metrotown Station",
-    type: "bus",
-  },
-]
-
-const mockStops = [
-  {
-    name: "Harris Rd / 119 Ave S...",
-    routes: ["701", "722", "791"],
-  },
-  {
-    name: "222 St / 119 Ave Sout...",
-    routes: ["733", "741", "743", "745", "746", "748"],
-  },
-  {
-    name: "200 St / 119a Ave No...",
-    routes: ["595", "701", "791"],
-  },
-  {
-    name: "272 St / 11900 Block ...",
-    routes: ["749"],
-  },
-]
-
-const mockSubwayStations = [
-  {
-    name: "Waterfront Station",
-    routes: ["44", "50", "R5"],
-    hasSeaBus: true,
-    hasWheelchair: true,
-  },
-  {
-    name: "Burrard Station",
-    routes: ["2", "5", "22", "44", "209", "210", "211", "214"],
-    time: "+2 min",
-  },
-  {
-    name: "Granville Station",
-    routes: ["4", "7", "10", "14", "16", "17", "20", "50"],
-    time: "+3 min",
-  },
-  {
-    name: "Stadium-Chinatown Station",
-    routes: ["23"],
-    time: "+5 min",
-  },
-  {
-    name: "Main Street-Science World Station",
-    routes: ["3", "8", "19", "22", "23", "N8", "N19"],
-    time: "+7 min",
-  },
-  {
-    name: "Commercial-Broadway Station",
-    routes: ["9", "20", "99", "N9", "N20"],
-    hasMillennium: true,
-    time: "+10 min",
-  },
-]
+// const mockRoutes = [...]
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false })
 
@@ -112,6 +30,12 @@ export default function TransitApp() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedRoute, setSelectedRoute] = useState<any>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [routes, setRoutes] = useState<any[]>([]);
+  const [routesError, setRoutesError] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const mapRef = useRef<any>(null);
 
   // 获取用户当前位置
   useEffect(() => {
@@ -129,6 +53,46 @@ export default function TransitApp() {
     }
   }, [])
 
+  // 获取公交线路数据
+  useEffect(() => {
+    if (!userLocation) return;
+    fetch(`/api/routes?lat=${userLocation.lat}&lng=${userLocation.lng}`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setRoutes(data);
+          setRoutesError(null);
+        } else {
+          setRoutes([]);
+          setRoutesError(data?.error || '数据格式错误');
+        }
+      })
+      .catch((e) => {
+        setRoutes([]);
+        setRoutesError('网络错误');
+      });
+  }, [userLocation])
+
+  // 搜索功能：本地过滤公交线路
+  const handleSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchInput(value);
+    if (!value) {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    // 支持按线路编号或名称、站点名模糊搜索
+    const q = value.toLowerCase();
+    const filtered = routes.filter(
+      (r) =>
+        r.route_short_name?.toLowerCase().includes(q) ||
+        r.route_long_name?.toLowerCase().includes(q)
+    );
+    setSearchResults(filtered);
+  };
+
   const handleSearch = (query: string) => {
     setSearchQuery(query)
     if (query.toLowerCase().includes("119")) {
@@ -144,56 +108,70 @@ export default function TransitApp() {
   }
 
   const renderHomeView = () => (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-[#181B1F] text-white">
       {/* Map Area */}
-      <div className="relative h-96 bg-gray-800 overflow-hidden">
+      <div className="relative h-80 bg-[#181B1F] overflow-hidden">
         {userLocation ? (
-          <MapView userLocation={userLocation} />
+          <MapView ref={mapRef} userLocation={userLocation} />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">Loading map...</div>
         )}
-        {/* 右上角设置按钮等可保留 */}
+        {/* 设置按钮 */}
         <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
-          <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center">
-            <MapPin className="w-6 h-6 text-yellow-400" />
-          </div>
+          <button
+            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-[#3DDC97] focus:outline-none"
+            onClick={() => mapRef.current?.recenter && mapRef.current.recenter()}
+            aria-label="回到当前位置"
+          >
+            <MapPin className="w-6 h-6 text-[#3DDC97]" />
+          </button>
           <Settings className="w-6 h-6 text-gray-400" />
+        </div>
+      </div>
+
+      {/* Search Input */}
+      <div className="px-4 -mt-8 z-20 relative">
+        <div className="rounded-2xl bg-[#1E2228] shadow-lg flex items-center px-4 py-3 border border-[#23272F]">
+          <Search className="w-6 h-6 text-[#3DDC97] mr-2" />
+          <input
+            className="flex-1 bg-transparent outline-none text-lg text-white placeholder-[#A0AEC0]"
+            placeholder="Where to? 站点名/线路号"
+            value={searchInput}
+            onChange={handleSearchInput}
+          />
         </div>
       </div>
 
       {/* Routes List */}
       <div className="p-4 space-y-4">
-        {mockRoutes.map((route) => (
-          <Card key={route.id} className="bg-gray-800 border-gray-700">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="text-3xl font-bold text-blue-400">{route.id}</div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <ArrowRight className="w-4 h-4 text-blue-400" />
-                      <span className="font-medium">{route.name}</span>
+        {routesError && (
+          <div className="text-red-400 p-2">{routesError}</div>
+        )}
+        {(searching ? searchResults : routes).length > 0 ? (
+          (searching ? searchResults : routes).map((route) => (
+            <Card key={route.route_id} className="bg-[#23272F] border border-[#23272F] shadow-md">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="text-4xl font-bold text-[#3DDC97]">{route.route_short_name}</div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <ArrowRight className="w-5 h-5 text-[#3DDC97]" />
+                        <span className="font-medium text-white text-lg">{route.route_long_name}</span>
+                      </div>
                     </div>
-                    {route.destination && <div className="text-sm text-gray-400 mt-1">{route.destination}</div>}
-                    {route.description && <div className="text-sm text-gray-400 mt-1">{route.description}</div>}
                   </div>
-                </div>
-                <div className="text-right">
-                  {route.time && <div className="text-blue-400 font-medium">{route.time}</div>}
-                  {route.times && (
-                    <div className="space-y-1">
-                      {route.times.map((time, idx) => (
-                        <div key={idx} className="text-blue-400 text-sm">
-                          {time}
-                        </div>
-                      ))}
-                    </div>
+                  {/* 距离最近站点的距离（如有） */}
+                  {route.closest_distance != null && (
+                    <div className="text-sm text-[#A0AEC0]">{route.closest_distance < 100 ? `${route.closest_distance}m` : `${(route.closest_distance/1000).toFixed(2)}km`} 内</div>
                   )}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))
+        ) : !routesError ? (
+          <div className="text-[#A0AEC0] p-2">暂无数据</div>
+        ) : null}
       </div>
     </div>
   )
