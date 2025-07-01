@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { messages } from './messages'
@@ -8,6 +9,8 @@ export const metadata: Metadata = {
   description: 'Created with v0',
   generator: 'v0.dev',
 }
+
+const locales = ['en', 'zh', 'fr']
 
 export async function generateStaticParams() {
   return [
@@ -25,7 +28,10 @@ export default async function LocaleLayout({
   params: { locale: string }
 }) {
   const { locale } = await params
-  const localeMessages = messages[locale] || {}
+  if (!locales.includes(locale)) {
+    notFound()
+  }
+  const localeMessages = messages[locale as keyof typeof messages] || {}
   return (
     <html lang={locale}>
       <body>

@@ -30,36 +30,6 @@ import { useRouter } from "next/navigation"
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false })
 
-const mockRoutes = [
-  {
-    id: "404",
-    name: "Four Road",
-    destination: "Granville Ave / Bridge St Eastbound",
-    time: "41 minutes",
-    type: "bus",
-  },
-  {
-    id: "408",
-    name: "Riverport",
-    destinations: ["Riverport", "Ironwood"],
-    times: ["7 min", "23:50", "00:55"],
-    description: "Garden City Rd / Bennett Rd Southbound",
-    type: "bus",
-  },
-  {
-    id: "410",
-    name: "22nd St Station",
-    time: "15 minutes",
-    type: "bus",
-  },
-  {
-    id: "119",
-    name: "TransLink",
-    destination: "Edmonds Station / Metrotown Station",
-    type: "bus",
-  },
-]
-
 const mockStops = [
   {
     name: "Harris Rd / 119 Ave S...",
@@ -130,6 +100,12 @@ export default function TransitApp() {
   const [language, setLanguage] = useState<"en" | "zh" | "fr">("en");
   const [languagePopoverOpen, setLanguagePopoverOpen] = useState(false);
   const mapRef = useRef<any>(null)
+
+  const handleRecenter = () => {
+    if (mapRef.current) {
+      mapRef.current.recenter?.();
+    }
+  };
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -216,10 +192,10 @@ export default function TransitApp() {
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">{t('loadingMap')}</div>
         )}
-        <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
+        <div className="absolute top-4 right-4 flex flex-col gap-2 z-10 pointer-events-auto">
           <button
             className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-[#3DDC97] focus:outline-none"
-            onClick={() => mapRef.current?.recenter && mapRef.current.recenter()}
+            onClick={handleRecenter}
             aria-label="回到当前位置"
           >
             <MapPin className="w-6 h-6 text-[#3DDC97]" />
