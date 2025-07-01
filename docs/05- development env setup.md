@@ -7,6 +7,10 @@ npm install -g pnpm
 ## Install dependencies:
 pnpm install
 
+## 多语言支持
+del node_modules /s 
+pnpm add next-intl
+
 
 ## Start the development server:
 
@@ -19,3 +23,5 @@ npm run dev
 
 ## browse
 Open your browser and go to http://localhost:3000 to view the app.
+
+

@@ -1,0 +1,11 @@
+{
+  "settings": "Paramètres",
+  "language": "Langue",
+  "home": "Accueil",
+  "work": "Travail",
+  "addLocation": "Ajouter un lieu...",
+  "showOnMap": "Afficher sur la carte",
+  "whereToPlaceholder": "Où aller ? Nom de la station/Numéro de ligne",
+  "loadingMap": "Chargement de la carte...",
+  "noData": "Pas de données disponibles"
+}

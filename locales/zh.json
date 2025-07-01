@@ -1,0 +1,11 @@
+{
+  "settings": "设置",
+  "language": "语言",
+  "home": "家",
+  "work": "工作",
+  "addLocation": "添加位置...",
+  "showOnMap": "显示在地图上",
+  "whereToPlaceholder": "去哪儿？站点名/线路号",
+  "loadingMap": "加载地图中...",
+  "noData": "暂无数据"
+}

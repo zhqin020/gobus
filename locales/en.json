@@ -1,0 +1,11 @@
+{
+  "settings": "Settings",
+  "language": "Language",
+  "home": "Home",
+  "work": "Work",
+  "addLocation": "Add location...",
+  "showOnMap": "Show on map",
+  "whereToPlaceholder": "Where to? Station name/Route number",
+  "loadingMap": "Loading map...",
+  "noData": "No data available"
+}
