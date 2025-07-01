@@ -30,16 +30,88 @@ import { useRouter } from "next/navigation"
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false })
 
+const mockRoutes = [
+  {
+    id: "404",
+    name: "Four Road",
+    destination: "Granville Ave / Bridge St Eastbound",
+    time: "41 minutes",
+    type: "bus",
+  },
+  {
+    id: "408",
+    name: "Riverport",
+    destinations: ["Riverport", "Ironwood"],
+    times: ["7 min", "23:50", "00:55"],
+    description: "Garden City Rd / Bennett Rd Southbound",
+    type: "bus",
+  },
+  {
+    id: "410",
+    name: "22nd St Station",
+    time: "15 minutes",
+    type: "bus",
+  },
+  {
+    id: "119",
+    name: "TransLink",
+    destination: "Edmonds Station / Metrotown Station",
+    type: "bus",
+  },
+]
+
 const mockStops = [
-  { name: "Stop 1", routes: ["1", "2", "3"] },
-  { name: "Stop 2", routes: ["4", "5"] },
-  { name: "Stop 3", routes: ["6"] },
+  {
+    name: "Harris Rd / 119 Ave S...",
+    routes: ["701", "722", "791"],
+  },
+  {
+    name: "222 St / 119 Ave Sout...",
+    routes: ["733", "741", "743", "745", "746", "748"],
+  },
+  {
+    name: "200 St / 119a Ave No...",
+    routes: ["595", "701", "791"],
+  },
+  {
+    name: "272 St / 11900 Block ...",
+    routes: ["749"],
+  },
 ]
 
 const mockSubwayStations = [
-  { name: "Station 1", hasSeaBus: true, hasMillennium: false, routes: ["Expo", "19"] },
-  { name: "Station 2", hasSeaBus: false, hasMillennium: true, routes: ["Millennium", "31"] },
-  { name: "Station 3", hasSeaBus: false, hasMillennium: false, routes: ["110", "116"] },
+  {
+    name: "Waterfront Station",
+    routes: ["44", "50", "R5"],
+    hasSeaBus: true,
+    hasWheelchair: true,
+  },
+  {
+    name: "Burrard Station",
+    routes: ["2", "5", "22", "44", "209", "210", "211", "214"],
+    time: "+2 min",
+  },
+  {
+    name: "Granville Station",
+    routes: ["4", "7", "10", "14", "16", "17", "20", "50"],
+    time: "+3 min",
+  },
+  {
+    name: "Stadium-Chinatown Station",
+    routes: ["23"],
+    time: "+5 min",
+  },
+  {
+    name: "Main Street-Science World Station",
+    routes: ["3", "8", "19", "22", "23", "N8", "N19"],
+    time: "+7 min",
+  },
+  {
+    name: "Commercial-Broadway Station",
+    routes: ["9", "20", "99", "N9", "N20"],
+    hasMillennium: true,
+    time: "+10 min",
+  },
 ]
 
 export default function TransitApp() {
@@ -419,7 +491,7 @@ export default function TransitApp() {
                 <div className="font-medium">{stop.name}</div>
                 {stop.routes.length > 0 && (
                   <div className="flex items-center gap-2 mt-1">
-                    {stop.routes.includes("Expo") && <Badge className="bg-blue-600 text-white text-xs">Expo</Badge>}
+                    {stop.routes.includes("Expo") && <Badge className="bg-blue-600 text-white">Expo</Badge>}
                     <Bus className="w-4 h-4 text-gray-400" />
                     <div className="flex gap-1">
                       {stop.routes

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { NextIntlClientProvider } from 'next-intl'
 import { messages } from './messages'
+import '../globals.css'
 
 export const metadata: Metadata = {
   title: 'v0 App',
