@@ -3,22 +3,20 @@
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
-import { useEffect, useRef, forwardRef, useImperativeHandle } from "react"
+import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from "react"
 import type { Map as LeafletMap } from 'leaflet';
 
-// 修复默认 marker 图标丢失
-const DefaultIcon = L.icon({
-  iconUrl: "/images/marker-icon.png",
-  shadowUrl: "/images/marker-shadow.png",
-  iconRetinaUrl: "/images/marker-icon-2x.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-})
-
+// Fix Leaflet's default icon URLs to avoid 404 errors with locale prefix
 if (typeof window !== "undefined") {
-  L.Marker.prototype.options.icon = DefaultIcon
+  const iconUrl = window.location.origin + "/images/marker-icon.png";
+  const iconRetinaUrl = window.location.origin + "/images/marker-icon-2x.png";
+  const shadowUrl = window.location.origin + "/images/marker-shadow.png";
+  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconUrl: iconUrl,
+    iconRetinaUrl: iconRetinaUrl,
+    shadowUrl: shadowUrl,
+  });
 }
 
 const MapView = forwardRef<
@@ -38,9 +36,20 @@ const MapView = forwardRef<
     }
   }))
 
-  useEffect(() => {
-    // 仅用于触发 marker icon 修复
-  }, [])
+  // 只在客户端创建 DefaultIcon，并传递给 Marker
+  const markerIcon = useMemo(() => {
+    if (typeof window === "undefined") return undefined;
+    const getAbsoluteUrl = (path: string) => window.location.origin + path;
+    return L.icon({
+      iconUrl: getAbsoluteUrl("/images/marker-icon.png"),
+      shadowUrl: getAbsoluteUrl("/images/marker-shadow.png"),
+      iconRetinaUrl: getAbsoluteUrl("/images/marker-icon-2x.png"),
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41],
+    });
+  }, [userLocation]);
 
   return (
     <MapContainer
@@ -54,9 +63,11 @@ const MapView = forwardRef<
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <Marker position={userLocation}>
-        <Popup>你在这里</Popup>
-      </Marker>
+      {markerIcon && (
+        <Marker position={userLocation} icon={markerIcon}>
+          <Popup>你在这里</Popup>
+        </Marker>
+      )}
     </MapContainer>
   )
 })

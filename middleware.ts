@@ -9,12 +9,13 @@ export function middleware(request: NextRequest) {
   if (locales.includes(locale)) {
     return NextResponse.next()
   }
-  // 允许静态资源、API、favicon等不被 locale 捕获
+  // 允许静态资源、API、favicon、images等不被 locale 捕获
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
     pathname.startsWith('/favicon.ico') ||
-    pathname.startsWith('/public')
+    pathname.startsWith('/public') ||
+    pathname.startsWith('/images')
   ) {
     return NextResponse.next()
   }
@@ -24,6 +25,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next|api|favicon.ico|public).*)',
+    '/((?!_next|api|favicon.ico|public|images).*)',
   ],
 }
