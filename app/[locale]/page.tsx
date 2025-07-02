@@ -176,16 +176,20 @@ export default function TransitApp() {
       setAddressSearchResults([]);
       return;
     }
+    const currentRequestId = ++addressSearchRequestId;
     try {
       const response = await fetch(`/api/proxy-nominatim?q=${encodeURIComponent(value)}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch from proxy');
-      }
+      if (!response.ok) throw new Error('Failed to fetch from proxy');
       const data = await response.json();
-      setAddressSearchResults(data);
+      console.log('[AddressSearch] 查询结果:', data); // 输出到控制台
+      // 只处理最后一次请求的结果
+      if (currentRequestId === addressSearchRequestId) {
+        setAddressSearchResults(data);
+      }
     } catch (error) {
-      console.error("Address search error:", error);
-      setAddressSearchResults([]);
+      if (currentRequestId === addressSearchRequestId) {
+        setAddressSearchResults([]);
+      }
     }
   };
 
@@ -774,3 +778,6 @@ export default function TransitApp() {
     </div>
   )
 }
+
+// 在文件顶部（import 之后，export default function TransitApp 之前）
+let addressSearchRequestId = 0;
