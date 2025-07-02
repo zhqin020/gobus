@@ -105,6 +105,7 @@ export default function TransitApp() {
   const [addressSearchInput, setAddressSearchInput] = useState("");
   const [addressSearchResults, setAddressSearchResults] = useState<string[]>([]);
   const mapRef = useRef<{ recenter: () => void } | null>(null);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   const handleRecenter = () => {
     console.log('[MapPin] recenter button clicked');
@@ -168,29 +169,42 @@ export default function TransitApp() {
     setSearchResults(filtered);
   };
 
-  // Address search input change handler
-  const handleAddressSearchInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddressSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setAddressSearchInput(value);
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
     if (!value) {
       setAddressSearchResults([]);
       return;
     }
-    const currentRequestId = ++addressSearchRequestId;
-    try {
-      const response = await fetch(`/api/proxy-nominatim?q=${encodeURIComponent(value)}`);
-      if (!response.ok) throw new Error('Failed to fetch from proxy');
-      const data = await response.json();
-      console.log('[AddressSearch] 查询结果:', data); // 输出到控制台
-      // 只处理最后一次请求的结果
-      if (currentRequestId === addressSearchRequestId) {
-        setAddressSearchResults(data);
+    debounceTimer.current = setTimeout(async () => {
+      const currentRequestId = ++addressSearchRequestId;
+      try {
+        const params = new URLSearchParams({ q: value });
+        // 自动带上定位参数
+        if (userLocation) {
+          params.set('lat', String(userLocation.lat));
+          params.set('lng', String(userLocation.lng));
+        }
+        // 自动带上当前界面语言
+        params.set('language', language);
+        // 如有city变量可用，也可加上city参数
+        // if (currentCity) params.set('city', currentCity);
+        const response = await fetch(`/api/proxy-nominatim?${params.toString()}`);
+        if (!response.ok) throw new Error('Failed to fetch from proxy');
+        const data = await response.json();
+        console.log('[AddressSearch] 查询结果:', data);
+        if (currentRequestId === addressSearchRequestId) {
+          setAddressSearchResults(data);
+        }
+      } catch (error) {
+        if (currentRequestId === addressSearchRequestId) {
+          setAddressSearchResults([]);
+        }
       }
-    } catch (error) {
-      if (currentRequestId === addressSearchRequestId) {
-        setAddressSearchResults([]);
-      }
-    }
+    }, 1000); // 1秒防抖
   };
 
   // Handle selecting an address from search results
@@ -721,6 +735,39 @@ export default function TransitApp() {
       </div>
     </div>
   )
+
+  // 加载本地设置
+  useEffect(() => {
+    const savedLang = localStorage.getItem('language');
+    if (savedLang && (savedLang === 'en' || savedLang === 'zh' || savedLang === 'fr')) {
+      setLanguage(savedLang);
+    }
+    const savedHome = localStorage.getItem('homeAddress');
+    if (savedHome) setHomeAddress(savedHome);
+    const savedWork = localStorage.getItem('workAddress');
+    if (savedWork) setWorkAddress(savedWork);
+  }, []);
+
+  // 保存language
+  useEffect(() => {
+    localStorage.setItem('language', language);
+  }, [language]);
+
+  // 保存home/work address
+  useEffect(() => {
+    if (homeAddress) {
+      localStorage.setItem('homeAddress', homeAddress);
+    } else {
+      localStorage.removeItem('homeAddress');
+    }
+  }, [homeAddress]);
+  useEffect(() => {
+    if (workAddress) {
+      localStorage.setItem('workAddress', workAddress);
+    } else {
+      localStorage.removeItem('workAddress');
+    }
+  }, [workAddress]);
 
   return (
     <div className="max-w-md mx-auto bg-gray-900">
