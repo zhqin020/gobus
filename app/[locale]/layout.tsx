@@ -33,12 +33,8 @@ export default async function LocaleLayout({
   }
   const localeMessages = messages[locale as keyof typeof messages] || {}
   return (
-    <html lang={locale}>
-      <body>
-        <NextIntlClientProvider locale={locale} messages={localeMessages}>
-          {children}
-        </NextIntlClientProvider>
-      </body>
-    </html>
+    <NextIntlClientProvider locale={locale} messages={localeMessages}>
+      {children}
+    </NextIntlClientProvider>
   )
 }

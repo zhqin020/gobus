@@ -7,5 +7,8 @@
   "showOnMap": "Show on map",
   "whereToPlaceholder": "Where to? Station name/Route number",
   "loadingMap": "Loading map...",
-  "noData": "No data available"
+  "noData": "No data available",
+  "searchAddress": "Search address",
+  "noAddressSet": "No address set",
+  "noResults": "No results"
 }

@@ -7,5 +7,8 @@
   "showOnMap": "显示在地图上",
   "whereToPlaceholder": "去哪儿？站点名/线路号",
   "loadingMap": "加载地图中...",
-  "noData": "暂无数据"
+  "noData": "暂无数据",
+  "searchAddress": "搜索地址",
+  "noAddressSet": "未设置地址",
+  "noResults": "无结果"
 }

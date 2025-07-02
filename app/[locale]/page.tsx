@@ -99,11 +99,20 @@ export default function TransitApp() {
   const [showOnMap, setShowOnMap] = useState(true);
   const [language, setLanguage] = useState<"en" | "zh" | "fr">("en");
   const [languagePopoverOpen, setLanguagePopoverOpen] = useState(false);
-  const mapRef = useRef<any>(null)
+  const [homeAddress, setHomeAddress] = useState<string | null>(null);
+  const [workAddress, setWorkAddress] = useState<string | null>("1498 Cliveden Avenue");
+  const [editingAddressType, setEditingAddressType] = useState<"home" | "work" | null>(null);
+  const [addressSearchInput, setAddressSearchInput] = useState("");
+  const [addressSearchResults, setAddressSearchResults] = useState<string[]>([]);
+  const mapRef = useRef<{ recenter: () => void } | null>(null);
 
   const handleRecenter = () => {
+    console.log('[MapPin] recenter button clicked');
     if (mapRef.current) {
-      mapRef.current.recenter?.();
+      console.log('[MapPin] mapRef.current found, calling recenter');
+      mapRef.current.recenter();
+    } else {
+      console.warn('[MapPin] mapRef.current is null');
     }
   };
 
@@ -157,6 +166,39 @@ export default function TransitApp() {
         r.route_long_name?.toLowerCase().includes(q)
     );
     setSearchResults(filtered);
+  };
+
+  // Address search input change handler
+  const handleAddressSearchInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setAddressSearchInput(value);
+    if (!value) {
+      setAddressSearchResults([]);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/proxy-nominatim?q=${encodeURIComponent(value)}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch from proxy');
+      }
+      const data = await response.json();
+      setAddressSearchResults(data);
+    } catch (error) {
+      console.error("Address search error:", error);
+      setAddressSearchResults([]);
+    }
+  };
+
+  // Handle selecting an address from search results
+  const handleAddressSelect = (address: string) => {
+    if (editingAddressType === "home") {
+      setHomeAddress(address);
+    } else if (editingAddressType === "work") {
+      setWorkAddress(address);
+    }
+    setEditingAddressType(null);
+    setAddressSearchInput("");
+    setAddressSearchResults([]);
   };
 
   const handleSearch = (query: string) => {
@@ -315,31 +357,114 @@ export default function TransitApp() {
         <hr className="border-gray-600 mb-6" />
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-green-700 rounded-lg flex items-center justify-center text-white">
-                <Home className="w-6 h-6" />
+          {/* Home address section */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-green-700 rounded-lg flex items-center justify-center text-white">
+                  <Home className="w-6 h-6" />
+                </div>
+                <div className="text-white text-lg font-medium">{t('home')}</div>
               </div>
-              <div className="text-white text-lg font-medium">{t('home')}</div>
+              {editingAddressType === "home" ? (
+                <button
+                  className="p-2 rounded-md bg-red-700 hover:bg-red-800"
+                  onClick={() => setEditingAddressType(null)}
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              ) : (
+                <button
+                  className="p-2 rounded-md bg-green-700 hover:bg-green-800"
+                  onClick={() => setEditingAddressType("home")}
+                >
+                  <Edit3 className="w-5 h-5 text-white" />
+                </button>
+              )}
             </div>
-            <button className="p-2 rounded-md bg-green-700 hover:bg-green-800">
-              <Edit3 className="w-5 h-5 text-white" />
-            </button>
+            {editingAddressType === "home" ? (
+              <div>
+                <Input
+                  placeholder={t('searchAddress')}
+                  value={addressSearchInput}
+                  onChange={handleAddressSearchInput}
+                  autoFocus
+                  className="mb-2"
+                />
+                <div className="max-h-40 overflow-auto bg-gray-800 rounded-md border border-gray-700">
+                  {addressSearchResults.length > 0 ? (
+                    addressSearchResults.map((addr) => (
+                      <div
+                        key={addr}
+                        className="p-2 cursor-pointer hover:bg-green-700 text-white"
+                        onClick={() => handleAddressSelect(addr)}
+                      >
+                        {addr}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-2 text-gray-400">{t('noResults')}</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-gray-400 text-sm">{homeAddress || t('noAddressSet')}</div>
+            )}
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-green-700 rounded-lg flex items-center justify-center text-white">
-                <Briefcase className="w-6 h-6" />
-              </div>
-              <div>
+          {/* Work address section */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-green-700 rounded-lg flex items-center justify-center text-white">
+                  <Briefcase className="w-6 h-6" />
+                </div>
                 <div className="text-white text-lg font-medium">{t('work')}</div>
-                <div className="text-gray-400 text-sm">1498 Cliveden Avenue</div>
               </div>
+              {editingAddressType === "work" ? (
+                <button
+                  className="p-2 rounded-md bg-red-700 hover:bg-red-800"
+                  onClick={() => setEditingAddressType(null)}
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              ) : (
+                <button
+                  className="p-2 rounded-md bg-green-700 hover:bg-green-800"
+                  onClick={() => setEditingAddressType("work")}
+                >
+                  <Edit3 className="w-5 h-5 text-white" />
+                </button>
+              )}
             </div>
-            <button className="p-2 rounded-md bg-green-700 hover:bg-green-800">
-              <Edit3 className="w-5 h-5 text-white" />
-            </button>
+            {editingAddressType === "work" ? (
+              <div>
+                <Input
+                  placeholder={t('searchAddress')}
+                  value={addressSearchInput}
+                  onChange={handleAddressSearchInput}
+                  autoFocus
+                  className="mb-2"
+                />
+                <div className="max-h-40 overflow-auto bg-gray-800 rounded-md border border-gray-700">
+                  {addressSearchResults.length > 0 ? (
+                    addressSearchResults.map((addr) => (
+                      <div
+                        key={addr}
+                        className="p-2 cursor-pointer hover:bg-green-700 text-white"
+                        onClick={() => handleAddressSelect(addr)}
+                      >
+                        {addr}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-2 text-gray-400">{t('noResults')}</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-gray-400 text-sm">{workAddress || t('noAddressSet')}</div>
+            )}
           </div>
 
           <button className="flex items-center justify-center gap-2 text-gray-400 hover:text-white mt-2">

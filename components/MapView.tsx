@@ -1,6 +1,6 @@
 "use client"
 
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet"
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from "react"
@@ -19,6 +19,19 @@ if (typeof window !== "undefined") {
   });
 }
 
+const RecenterControl = forwardRef<{ recenter: () => void }, { center: { lat: number; lng: number } }>(function RecenterControl({ center }, ref) {
+  const map = useMap();
+
+  useImperativeHandle(ref, () => ({
+    recenter: () => {
+      console.log('[RecenterControl] recenter called with center:', center);
+      map.flyTo(center, 14);
+    }
+  }), [center, map]);
+
+  return null;
+});
+
 const MapView = forwardRef<
   { recenter: () => void } | undefined,
   { userLocation: { lat: number; lng: number } }
@@ -26,15 +39,14 @@ const MapView = forwardRef<
   { userLocation },
   ref
 ) {
-  const mapRef = useRef<LeafletMap | null>(null)
+  const recenterRef = useRef<{ recenter: () => void }>(null);
 
   useImperativeHandle(ref, () => ({
     recenter: () => {
-      if (mapRef.current) {
-        mapRef.current.setView(userLocation, 14)
-      }
+      console.log('[MapView] recenter called');
+      recenterRef.current?.recenter();
     }
-  }))
+  }));
 
   // 只在客户端创建 DefaultIcon，并传递给 Marker
   const markerIcon = useMemo(() => {
@@ -57,7 +69,6 @@ const MapView = forwardRef<
       zoom={14}
       style={{ width: "100%", height: "100%", zIndex: 1 }}
       scrollWheelZoom={false}
-      whenCreated={(mapInstance: LeafletMap) => { mapRef.current = mapInstance }}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -68,6 +79,7 @@ const MapView = forwardRef<
           <Popup>你在这里</Popup>
         </Marker>
       )}
+      <RecenterControl ref={recenterRef} center={userLocation} />
     </MapContainer>
   )
 })

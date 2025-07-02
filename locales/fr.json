@@ -7,5 +7,8 @@
   "showOnMap": "Afficher sur la carte",
   "whereToPlaceholder": "Où aller ? Nom de la station/Numéro de ligne",
   "loadingMap": "Chargement de la carte...",
-  "noData": "Pas de données disponibles"
+  "noData": "Pas de données disponibles",
+  "searchAddress": "Rechercher une adresse",
+  "noAddressSet": "Aucune adresse définie",
+  "noResults": "Aucun résultat"
 }
