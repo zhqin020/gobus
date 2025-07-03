@@ -28,17 +28,7 @@ import "leaflet/dist/leaflet.css"
 import { useTranslations } from "next-intl"
 import { useRouter } from "next/navigation"
 
-// Import the MapView and key generator
-import MapView, { getMapViewKey } from "@/components/MapView"
-
-// Create a client-only version of MapView for the homepage
-const HomePageMapView = ({ ...props }) => {
-  return (
-    <div className="h-full w-full">
-      <MapView {...props} />
-    </div>
-  )
-};
+const MapView = dynamic(() => import("@/components/MapView"), { ssr: false })
 
 export default function TransitApp() {
   const t = useTranslations()
@@ -208,11 +198,7 @@ export default function TransitApp() {
     <div className="min-h-screen bg-[#181B1F] text-white">
       <div className="relative h-80 bg-[#181B1F] overflow-hidden">
         {userLocation ? (
-          <HomePageMapView 
-            key={getMapViewKey({ userLocation, reverseDirection })} 
-            ref={mapRef} 
-            userLocation={userLocation} 
-          />
+          <MapView ref={mapRef} userLocation={userLocation} />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">{t('loadingMap')}</div>
         )}
@@ -589,10 +575,6 @@ export default function TransitApp() {
         <div className="absolute inset-0" style={{ width: '100%', height: '100%' }}>
           {routePolyline.length > 0 && userLocation && (
             <MapView
-              key={getMapViewKey({ 
-                userLocation, 
-                reverseDirection
-              })}
               userLocation={userLocation}
               routePolyline={reverseDirection ? [...routePolyline].reverse() : routePolyline}
               stops={reverseDirection ? [...routeStops].reverse() : routeStops}

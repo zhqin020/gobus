@@ -1,27 +1,22 @@
 "use client"
 
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet"
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
-import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo, useState } from "react"
+import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from "react"
 import type { Map as LeafletMap } from 'leaflet';
 
 // Fix Leaflet's default icon URLs to avoid 404 errors with locale prefix
 if (typeof window !== "undefined") {
-  // Only run once, not on every component mount
-  if (!(L.Icon.Default.prototype as any)._getIconUrl_patched) {
-    const iconUrl = "/images/marker-icon.png";
-    const iconRetinaUrl = "/images/marker-icon-2x.png";
-    const shadowUrl = "/images/marker-shadow.png";
-    delete (L.Icon.Default.prototype as any)._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconUrl: iconUrl,
-      iconRetinaUrl: iconRetinaUrl,
-      shadowUrl: shadowUrl,
-    });
-    // Mark as patched to prevent multiple patches
-    (L.Icon.Default.prototype as any)._getIconUrl_patched = true;
-  }
+  const iconUrl = window.location.origin + "/images/marker-icon.png";
+  const iconRetinaUrl = window.location.origin + "/images/marker-icon-2x.png";
+  const shadowUrl = window.location.origin + "/images/marker-shadow.png";
+  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconUrl: iconUrl,
+    iconRetinaUrl: iconRetinaUrl,
+    shadowUrl: shadowUrl,
+  });
 }
 
 const RecenterControl = forwardRef<{ recenter: () => void }, { center: { lat: number; lng: number } }>(function RecenterControl({ center }, ref) {
@@ -37,51 +32,16 @@ const RecenterControl = forwardRef<{ recenter: () => void }, { center: { lat: nu
   return null;
 });
 
-// Add a stable key for the MapView component based on its props
-const getMapViewKey = (props: {
-  userLocation: { lat: number; lng: number },
-  reverseDirection?: boolean
-}) => {
-  if (!props.userLocation) return 'no-location';
-  return `mapview-${props.userLocation.lat}-${props.userLocation.lng}-${props.reverseDirection ? 'reverse' : 'normal'}`;
-};
-
-// Create a client-only component that wraps the actual MapView implementation
-const ClientOnlyMapView = ({ ...props }: any) => {
-  const [isClient, setIsClient] = useState(false);
-  
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-  
-  if (!isClient) {
-    return null;
-  }
-  
-  return <MapView {...props} />;
-};
-
-// Export the client-only version as the default component
-export default ClientOnlyMapView;
-
-// Export the key generator function for use in parent components
-export { getMapViewKey };
-
 const MapView = forwardRef<
   { recenter: () => void } | undefined,
   {
-    routes?: Route[];
-    stops?: Stop[];
-    userLocation: { lat: number; lng: number };
-    selectedStopId?: string;
-    selectedRouteId?: string;
-    reverseDirection?: boolean;
-    onRouteSelect?: (routeId: string) => void;
-    onStopSelect?: (stopId: string) => void;
-    onMapReady?: () => void;
+    userLocation: { lat: number; lng: number },
+    routePolyline?: Array<{ lat: number; lng: number }>, // 新增 prop: routePolyline
+    stops?: Array<{ lat: number; lng: number; name: string; transferRoutes?: string[] }>, // 新增 prop: stops
+    reverseDirection?: boolean // 新增 prop: reverseDirection
   }
 >(function MapView(
-  { routes, stops, userLocation, selectedStopId, selectedRouteId, reverseDirection, onRouteSelect, onStopSelect, onMapReady },
+  { userLocation, routePolyline, stops, reverseDirection },
   ref
 ) {
   const recenterRef = useRef<{ recenter: () => void }>(null);
@@ -110,24 +70,17 @@ const MapView = forwardRef<
 
   // 处理方向反转
   const polylinePoints = useMemo(() => {
-    if (!routes) return undefined;
-    return reverseDirection ? [...routes].reverse() : routes;
-  }, [routes, reverseDirection]);
+    if (!routePolyline) return undefined;
+    return reverseDirection ? [...routePolyline].reverse() : routePolyline;
+  }, [routePolyline, reverseDirection]);
 
   const stopMarkers = useMemo(() => {
     if (!stops) return undefined;
     return reverseDirection ? [...stops].reverse() : stops;
   }, [stops, reverseDirection]);
 
-  // Add stable keys for all dynamic content
-  const mapKey = useMemo(() => {
-    if (!userLocation) return 'no-location';
-    return `map-${userLocation.lat}-${userLocation.lng}-${reverseDirection}`;
-  }, [userLocation, reverseDirection]);
-
   return (
     <MapContainer
-      key={mapKey}
       center={userLocation}
       zoom={14}
       style={{ width: "100%", height: "100%", zIndex: 1 }}
@@ -148,7 +101,7 @@ const MapView = forwardRef<
       )}
       {/* 绘制所有站点 marker */}
       {markerIcon && stopMarkers && stopMarkers.map((stop, idx) => (
-        <Marker key={`stop-${idx}`} position={{ lat: stop.lat, lng: stop.lng }} icon={markerIcon}>
+        <Marker key={idx} position={{ lat: stop.lat, lng: stop.lng }} icon={markerIcon}>
           <Popup>
             <div>
               <div>{stop.name}</div>
@@ -166,3 +119,4 @@ const MapView = forwardRef<
   )
 })
 
+export default MapView
