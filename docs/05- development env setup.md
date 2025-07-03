@@ -24,4 +24,9 @@ npm run dev
 ## browse
 Open your browser and go to http://localhost:3000 to view the app.
 
+### 公交信息下载：
+启动定时任务（建议在服务端后台运行）
+npm run schedule-gtfs
 
+手动下载
+npm run download-gtfs

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useEffect, useState, useRef } from "react"
 import dynamic from "next/dynamic"
 import {
   Search,
@@ -28,61 +28,17 @@ import "leaflet/dist/leaflet.css"
 import { useTranslations } from "next-intl"
 import { useRouter } from "next/navigation"
 
-const MapView = dynamic(() => import("@/components/MapView"), { ssr: false })
+// Import the MapView and key generator
+import MapView, { getMapViewKey } from "@/components/MapView"
 
-const mockStops = [
-  {
-    name: "Harris Rd / 119 Ave S...",
-    routes: ["701", "722", "791"],
-  },
-  {
-    name: "222 St / 119 Ave Sout...",
-    routes: ["733", "741", "743", "745", "746", "748"],
-  },
-  {
-    name: "200 St / 119a Ave No...",
-    routes: ["595", "701", "791"],
-  },
-  {
-    name: "272 St / 11900 Block ...",
-    routes: ["749"],
-  },
-]
-
-const mockSubwayStations = [
-  {
-    name: "Waterfront Station",
-    routes: ["44", "50", "R5"],
-    hasSeaBus: true,
-    hasWheelchair: true,
-  },
-  {
-    name: "Burrard Station",
-    routes: ["2", "5", "22", "44", "209", "210", "211", "214"],
-    time: "+2 min",
-  },
-  {
-    name: "Granville Station",
-    routes: ["4", "7", "10", "14", "16", "17", "20", "50"],
-    time: "+3 min",
-  },
-  {
-    name: "Stadium-Chinatown Station",
-    routes: ["23"],
-    time: "+5 min",
-  },
-  {
-    name: "Main Street-Science World Station",
-    routes: ["3", "8", "19", "22", "23", "N8", "N19"],
-    time: "+7 min",
-  },
-  {
-    name: "Commercial-Broadway Station",
-    routes: ["9", "20", "99", "N9", "N20"],
-    hasMillennium: true,
-    time: "+10 min",
-  },
-]
+// Create a client-only version of MapView for the homepage
+const HomePageMapView = ({ ...props }) => {
+  return (
+    <div className="h-full w-full">
+      <MapView {...props} />
+    </div>
+  )
+};
 
 export default function TransitApp() {
   const t = useTranslations()
@@ -104,6 +60,10 @@ export default function TransitApp() {
   const [editingAddressType, setEditingAddressType] = useState<"home" | "work" | null>(null);
   const [addressSearchInput, setAddressSearchInput] = useState("");
   const [addressSearchResults, setAddressSearchResults] = useState<string[]>([]);
+  const [routeStops, setRouteStops] = useState<any[]>([]);
+  const [routePolyline, setRoutePolyline] = useState<any[]>([]);
+  const [loadingStops, setLoadingStops] = useState(false);
+  const [reverseDirection, setReverseDirection] = useState(false);
   const mapRef = useRef<{ recenter: () => void } | null>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -248,7 +208,11 @@ export default function TransitApp() {
     <div className="min-h-screen bg-[#181B1F] text-white">
       <div className="relative h-80 bg-[#181B1F] overflow-hidden">
         {userLocation ? (
-          <MapView ref={mapRef} userLocation={userLocation} />
+          <HomePageMapView 
+            key={getMapViewKey({ userLocation, reverseDirection })} 
+            ref={mapRef} 
+            userLocation={userLocation} 
+          />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">{t('loadingMap')}</div>
         )}
@@ -288,7 +252,7 @@ export default function TransitApp() {
         )}
         {(searching ? searchResults : routes).length > 0 ? (
           (searching ? searchResults : routes).map((route) => (
-            <Card key={route.route_id} className="bg-[#23272F] border border-[#23272F] shadow-md">
+            <Card key={route.route_id} className="bg-[#23272F] border border-[#23272F] shadow-md cursor-pointer" onClick={() => handleRouteSelect(route)}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -543,19 +507,19 @@ export default function TransitApp() {
       <div className="p-4">
         <h3 className="text-gray-400 text-sm font-medium mb-4">STOPS AND STATIONS</h3>
         <div className="space-y-4">
-          {mockStops.map((stop, idx) => (
-            <div key={idx} className="flex items-center gap-4">
+          {routes.length > 0 && routes.map((route) => (
+            <div key={route.route_id} className="flex items-center gap-4">
               <div className="w-10 h-10 bg-gray-700 rounded flex items-center justify-center">
                 <span className="text-white font-bold">T</span>
               </div>
               <div className="flex-1">
-                <div className="font-medium">{stop.name}</div>
+                <div className="font-medium">{route.route_long_name}</div>
                 <div className="flex items-center gap-2 mt-1">
                   <Bus className="w-4 h-4 text-gray-400" />
                   <div className="flex gap-2">
-                    {stop.routes.map((route) => (
-                      <Badge key={route} variant="secondary" className="bg-blue-600 text-white">
-                        {route}
+                    {route.route_short_name.split(',').map((r: string) => (
+                      <Badge key={r} variant="secondary" className="bg-blue-600 text-white cursor-pointer" onClick={() => handleRouteSelect(r)}>
+                        {r}
                       </Badge>
                     ))}
                   </div>
@@ -569,65 +533,112 @@ export default function TransitApp() {
     </div>
   )
 
+  // 加载选中线路的 stops 和 polyline
+  useEffect(() => {
+    if (!selectedRoute) return;
+    setLoadingStops(true);
+    fetch(`/api/gtfs/route/${selectedRoute.route_id}`)
+      .then(res => res.json())
+      .then(data => {
+        setRouteStops(data.stops || []);
+        setRoutePolyline(data.polyline || []);
+        setLoadingStops(false);
+      })
+      .catch(() => {
+        setRouteStops([]);
+        setRoutePolyline([]);
+        setLoadingStops(false);
+      });
+  }, [selectedRoute]);
+
   const renderStopsView = () => (
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="relative h-64 bg-gray-800">
-        <div className="absolute top-4 left-4 text-4xl font-bold text-blue-400">119</div>
-        <div className="absolute bottom-4 left-4 right-4">
-          <div className="bg-yellow-600 p-3 rounded-lg">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5" />
-              <div>
-                <div className="font-medium">Modified service</div>
-                <div className="text-sm">Posted 2 days ago</div>
-              </div>
-            </div>
+        {selectedRoute && (
+          <div className="absolute top-4 left-4">
+            <div className="text-4xl font-bold text-blue-400">{selectedRoute.route_short_name || selectedRoute}</div>
+            <div className="text-lg text-white mt-2">{selectedRoute.route_long_name || ''}</div>
+            {selectedRoute.agency_name && <div className="text-sm text-gray-400 mt-1">{selectedRoute.agency_name}</div>}
+            {selectedRoute.route_desc && <div className="text-sm text-gray-400 mt-1">{selectedRoute.route_desc}</div>}
           </div>
+        )}
+        <div className="absolute top-4 right-4 flex flex-col gap-2 z-10 pointer-events-auto">
+          <button
+            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-[#3DDC97] focus:outline-none"
+            onClick={handleRecenter}
+            aria-label="回到当前位置"
+          >
+            <MapPin className="w-6 h-6 text-[#3DDC97]" />
+          </button>
+          <button
+            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-transparent hover:border-[#3DDC97] focus:outline-none"
+            onClick={() => setCurrentView("settings")}
+            aria-label="设置"
+          >
+            <Settings className="w-6 h-6 text-gray-400 hover:text-[#3DDC97]" />
+          </button>
+          <button
+            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-blue-400 focus:outline-none mt-2"
+            onClick={() => setReverseDirection(r => !r)}
+            aria-label="反转线路方向"
+          >
+            <ArrowRight className={`w-6 h-6 text-blue-400 transition-transform ${reverseDirection ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+        {/* 地图显示线路和站点 */}
+        <div className="absolute inset-0" style={{ width: '100%', height: '100%' }}>
+          {routePolyline.length > 0 && userLocation && (
+            <MapView
+              key={getMapViewKey({ 
+                userLocation, 
+                reverseDirection
+              })}
+              userLocation={userLocation}
+              routePolyline={reverseDirection ? [...routePolyline].reverse() : routePolyline}
+              stops={reverseDirection ? [...routeStops].reverse() : routeStops}
+              reverseDirection={reverseDirection}
+            />
+          )}
         </div>
       </div>
 
       <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center gap-2">
-          <ArrowRight className="w-5 h-5 text-blue-400" />
-          <span className="font-medium">Edmonds Station</span>
-        </div>
-        <div className="text-gray-400 text-sm">Kingsway / McKay Ave Eastbound</div>
+        {/* 可根据需要显示起点/终点等 */}
+        {routeStops.length > 0 && (
+          <div className="flex items-center gap-2">
+            <ArrowRight className="w-5 h-5 text-blue-400" />
+            <span className="font-medium">{reverseDirection ? routeStops[routeStops.length-1]?.stop_name : routeStops[0]?.stop_name}</span>
+          </div>
+        )}
+        {routeStops.length > 0 && (
+          <div className="text-gray-400 text-sm">{reverseDirection ? routeStops[routeStops.length-1]?.stop_desc : routeStops[0]?.stop_desc}</div>
+        )}
       </div>
 
       <div className="p-4">
-        <div className="space-y-4">
-          {[
-            { name: "Metrotown Station (Bay 6)", routes: ["Expo", "19", "31", "49", "110", "116", "129"], time: null },
-            { name: "McKay Ave / Kingsborough St Northbound", routes: [], time: "+1 min" },
-            { name: "Kingsway / McKay Ave Eastbound", routes: ["N19"], time: "+2 min" },
-            { name: "Kingsway / Sussex Ave Eastbound", routes: ["N19"], time: "+3 min" },
-            { name: "Kingsway / Nelson Ave Eastbound", routes: ["110", "144", "N19"], time: "+4 min" },
-            { name: "Kingsway / Marlborough", routes: [], time: "+5 min" },
-          ].map((stop, idx) => (
-            <div key={idx} className="flex items-center gap-4">
-              <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
-              <div className="flex-1">
-                <div className="font-medium">{stop.name}</div>
-                {stop.routes.length > 0 && (
-                  <div className="flex items-center gap-2 mt-1">
-                    {stop.routes.includes("Expo") && <Badge className="bg-blue-600 text-white">Expo</Badge>}
+        {loadingStops ? (
+          <div className="text-gray-400">加载中...</div>
+        ) : (
+          <div className="space-y-4">
+            {routeStops.map((stop, idx) => (
+              <div key={stop.stop_id} className="flex items-center gap-4">
+                <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
+                <div className="flex-1">
+                  <div className="font-medium">{stop.stop_name}</div>
+                  {/* 换乘线路可扩展：如有 transfers，可在此处渲染 */}
+                  {/* <div className="flex items-center gap-2 mt-1">
                     <Bus className="w-4 h-4 text-gray-400" />
                     <div className="flex gap-1">
-                      {stop.routes
-                        .filter((r) => r !== "Expo")
-                        .map((route) => (
-                          <Badge key={route} variant="secondary" className="bg-blue-600 text-white text-xs">
-                            {route}
-                          </Badge>
-                        ))}
+                      {stop.transferRoutes?.map((route: string) => (
+                        <Badge key={route} variant="secondary" className="bg-blue-600 text-white text-xs">{route}</Badge>
+                      ))}
                     </div>
-                  </div>
-                )}
+                  </div> */}
+                </div>
               </div>
-              {stop.time && <div className="text-gray-400 text-sm">{stop.time}</div>}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -710,25 +721,23 @@ export default function TransitApp() {
 
       <div className="p-4">
         <div className="space-y-4">
-          {mockSubwayStations.map((station, idx) => (
-            <div key={idx} className="flex items-center gap-4">
+          {routes.length > 0 && routes.map((route) => (
+            <div key={route.route_id} className="flex items-center gap-4">
               <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
               <div className="flex-1">
-                <div className="font-medium">{station.name}</div>
+                <div className="font-medium">{route.route_long_name}</div>
                 <div className="flex items-center gap-2 mt-1">
-                  {station.hasSeaBus && <Badge className="bg-gray-600 text-white text-xs">SeaBus</Badge>}
-                  {station.hasMillennium && <Badge className="bg-yellow-600 text-white text-xs">Millennium</Badge>}
                   <Bus className="w-4 h-4 text-gray-400" />
                   <div className="flex gap-1">
-                    {station.routes.map((route) => (
-                      <Badge key={route} variant="secondary" className="bg-blue-600 text-white text-xs">
-                        {route}
+                    {route.route_short_name.split(',').map((r: string) => (
+                      <Badge key={r} variant="secondary" className="bg-blue-600 text-white text-xs">
+                        {r}
                       </Badge>
                     ))}
                   </div>
                 </div>
               </div>
-              {station.time && <div className="text-gray-400 text-sm">{station.time}</div>}
+              {route.time && <div className="text-gray-400 text-sm">{route.time}</div>}
             </div>
           ))}
         </div>
