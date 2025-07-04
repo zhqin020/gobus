@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
       console.log('[Google Places New] 响应:', JSON.stringify(data));
       if (googleRes.ok && data.status !== 'INVALID_ARGUMENT') {
         // Google Places v1: data.suggestions[].placePrediction.structuredFormat.mainText.text
-        if (data.suggestions && data.suggestions.length > 0) {
+        if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
           let results = data.suggestions
             .filter((s: any) => {
               if (!city) return true;
@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
       const data = await mapboxRes.json();
       console.log('[Mapbox] 响应:', JSON.stringify(data));
       if (mapboxRes.ok) {
-        if (data.suggestions && data.suggestions.length > 0) {
+        if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
           let results = data.suggestions.map((s: any) => {
             let context = s.context ? s.context.map((c: any) => c.name).join(', ') : '';
             return context ? `${s.name}, ${context}` : s.name;

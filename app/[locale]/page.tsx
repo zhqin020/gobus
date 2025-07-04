@@ -29,6 +29,7 @@ import { useTranslations } from "next-intl"
 import { useRouter } from "next/navigation"
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false })
+const GtfsSqlDemo = dynamic(() => import('@/components/GtfsSqlDemo.client'), { ssr: false });
 
 export default function TransitApp() {
   const t = useTranslations()
@@ -197,6 +198,10 @@ export default function TransitApp() {
   const renderHomeView = () => (
     <div className="min-h-screen bg-[#181B1F] text-white">
       <div className="relative h-80 bg-[#181B1F] overflow-hidden">
+        {/* GTFS SQLite Demo 区块 */}
+        <div className="absolute top-4 left-4 z-30 bg-black bg-opacity-70 rounded p-2">
+          <GtfsSqlDemo />
+        </div>
         {userLocation ? (
           <MapView ref={mapRef} userLocation={userLocation} />
         ) : (
@@ -236,8 +241,8 @@ export default function TransitApp() {
         {routesError && (
           <div className="text-red-400 p-2">{routesError}</div>
         )}
-        {(searching ? searchResults : routes).length > 0 ? (
-          (searching ? searchResults : routes).map((route) => (
+        {((searching ? searchResults : routes) ?? []).length > 0 ? (
+          Array.isArray(searching ? searchResults : routes) && (searching ? searchResults : routes).map((route) => (
             <Card key={route.route_id} className="bg-[#23272F] border border-[#23272F] shadow-md cursor-pointer" onClick={() => handleRouteSelect(route)}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -360,7 +365,7 @@ export default function TransitApp() {
                   className="mb-2"
                 />
                 <div className="max-h-40 overflow-auto bg-gray-800 rounded-md border border-gray-700">
-                  {addressSearchResults.length > 0 ? (
+                  {Array.isArray(addressSearchResults) && addressSearchResults.length > 0 ? (
                     addressSearchResults.map((addr) => (
                       <div
                         key={addr}
@@ -415,7 +420,7 @@ export default function TransitApp() {
                   className="mb-2"
                 />
                 <div className="max-h-40 overflow-auto bg-gray-800 rounded-md border border-gray-700">
-                  {addressSearchResults.length > 0 ? (
+                  {Array.isArray(addressSearchResults) && addressSearchResults.length > 0 ? (
                     addressSearchResults.map((addr) => (
                       <div
                         key={addr}
@@ -493,7 +498,7 @@ export default function TransitApp() {
       <div className="p-4">
         <h3 className="text-gray-400 text-sm font-medium mb-4">STOPS AND STATIONS</h3>
         <div className="space-y-4">
-          {routes.length > 0 && routes.map((route) => (
+          {((routes ?? []).length > 0) && (routes ?? []).map((route) => (
             <div key={route.route_id} className="flex items-center gap-4">
               <div className="w-10 h-10 bg-gray-700 rounded flex items-center justify-center">
                 <span className="text-white font-bold">T</span>
@@ -502,8 +507,8 @@ export default function TransitApp() {
                 <div className="font-medium">{route.route_long_name}</div>
                 <div className="flex items-center gap-2 mt-1">
                   <Bus className="w-4 h-4 text-gray-400" />
-                  <div className="flex gap-2">
-                    {route.route_short_name.split(',').map((r: string) => (
+                <div className="flex gap-2">
+                    {(typeof route.route_short_name === 'string' ? route.route_short_name.split(',') : []).map((r: string) => (
                       <Badge key={r} variant="secondary" className="bg-blue-600 text-white cursor-pointer" onClick={() => handleRouteSelect(r)}>
                         {r}
                       </Badge>
@@ -573,11 +578,11 @@ export default function TransitApp() {
         </div>
         {/* 地图显示线路和站点 */}
         <div className="absolute inset-0" style={{ width: '100%', height: '100%' }}>
-          {routePolyline.length > 0 && userLocation && (
+          {routePolyline && Array.isArray(routePolyline) && routePolyline.length > 0 && userLocation && (
             <MapView
               userLocation={userLocation}
-              routePolyline={reverseDirection ? [...routePolyline].reverse() : routePolyline}
-              stops={reverseDirection ? [...routeStops].reverse() : routeStops}
+              routePolyline={reverseDirection ? [...(routePolyline ?? [])].reverse() : (routePolyline ?? [])}
+              stops={reverseDirection ? [...(routeStops ?? [])].reverse() : (routeStops ?? [])}
               reverseDirection={reverseDirection}
             />
           )}
@@ -586,13 +591,13 @@ export default function TransitApp() {
 
       <div className="p-4 border-b border-gray-700">
         {/* 可根据需要显示起点/终点等 */}
-        {routeStops.length > 0 && (
+        {Array.isArray(routeStops) && routeStops.length > 0 && (
           <div className="flex items-center gap-2">
             <ArrowRight className="w-5 h-5 text-blue-400" />
             <span className="font-medium">{reverseDirection ? routeStops[routeStops.length-1]?.stop_name : routeStops[0]?.stop_name}</span>
           </div>
         )}
-        {routeStops.length > 0 && (
+        {Array.isArray(routeStops) && routeStops.length > 0 && (
           <div className="text-gray-400 text-sm">{reverseDirection ? routeStops[routeStops.length-1]?.stop_desc : routeStops[0]?.stop_desc}</div>
         )}
       </div>
@@ -602,7 +607,7 @@ export default function TransitApp() {
           <div className="text-gray-400">加载中...</div>
         ) : (
           <div className="space-y-4">
-            {routeStops.map((stop, idx) => (
+            {Array.isArray(routeStops) && routeStops.map((stop, idx) => (
               <div key={stop.stop_id} className="flex items-center gap-4">
                 <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
                 <div className="flex-1">
@@ -703,7 +708,7 @@ export default function TransitApp() {
 
       <div className="p-4">
         <div className="space-y-4">
-          {routes.length > 0 && routes.map((route) => (
+          {((routes ?? []).length > 0) && (routes ?? []).map((route) => (
             <div key={route.route_id} className="flex items-center gap-4">
               <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
               <div className="flex-1">
@@ -711,7 +716,7 @@ export default function TransitApp() {
                 <div className="flex items-center gap-2 mt-1">
                   <Bus className="w-4 h-4 text-gray-400" />
                   <div className="flex gap-1">
-                    {route.route_short_name.split(',').map((r: string) => (
+                    {(typeof route.route_short_name === 'string' ? route.route_short_name.split(',') : []).map((r: string) => (
                       <Badge key={r} variant="secondary" className="bg-blue-600 text-white text-xs">
                         {r}
                       </Badge>

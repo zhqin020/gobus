@@ -100,12 +100,12 @@ const MapView = forwardRef<
         <Polyline positions={polylinePoints.map(p => [p.lat, p.lng])} pathOptions={{ color: "blue" }} />
       )}
       {/* 绘制所有站点 marker */}
-      {markerIcon && stopMarkers && stopMarkers.map((stop, idx) => (
+      {markerIcon && stopMarkers && Array.isArray(stopMarkers) && stopMarkers.map((stop, idx) => (
         <Marker key={idx} position={{ lat: stop.lat, lng: stop.lng }} icon={markerIcon}>
           <Popup>
             <div>
               <div>{stop.name}</div>
-              {stop.transferRoutes && stop.transferRoutes.length > 0 && (
+              {stop.transferRoutes && Array.isArray(stop.transferRoutes) && stop.transferRoutes.length > 0 && (
                 <div style={{ fontSize: '0.9em', color: '#888' }}>
                   换乘: {stop.transferRoutes.join(', ')}
                 </div>

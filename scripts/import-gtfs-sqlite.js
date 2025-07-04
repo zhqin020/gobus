@@ -8,6 +8,15 @@ const parse = require('csv-parse/sync').parse;
 const GTFS_DIR = path.join(__dirname, '../data/google_transit');
 const DB_PATH = path.join(__dirname, '../data/gtfs.sqlite');
 
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err.stack || err, '\nModule:', __filename);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason, p) => {
+  console.error('UNHANDLED REJECTION:', reason, '\nPromise:', p, '\nModule:', __filename);
+  process.exit(1);
+});
+
 function parseCsv(filePath) {
   const content = fs.readFileSync(filePath, 'utf-8');
   return parse(content, { columns: true, skip_empty_lines: true });
@@ -20,7 +29,7 @@ function inferType(val) {
 }
 
 function createTable(db, table, rows) {
-  if (!rows.length) return;
+  if (!Array.isArray(rows) || rows.length === 0) return;
   const columns = Object.keys(rows[0]);
   const types = columns.map(col => inferType(rows[0][col]));
   const sql = `CREATE TABLE IF NOT EXISTS ${table} (${columns.map((c, i) => `${c} ${types[i]}`).join(',')});`;
@@ -28,7 +37,7 @@ function createTable(db, table, rows) {
 }
 
 function insertRows(db, table, rows) {
-  if (!rows.length) return;
+  if (!Array.isArray(rows) || rows.length === 0) return;
   const columns = Object.keys(rows[0]);
   const placeholders = columns.map(() => '?').join(',');
   const stmt = db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${placeholders})`);
@@ -47,13 +56,13 @@ function importAll() {
   for (const file of files) {
     const table = file.replace('.txt', '');
     const rows = parseCsv(path.join(GTFS_DIR, file));
-    if (!rows.length) {
+    if (!Array.isArray(rows) || rows.length === 0) {
       console.log(`Skip ${file} (empty)`);
       continue;
     }
     createTable(db, table, rows);
     insertRows(db, table, rows);
-    console.log(`Imported ${file} -> ${table} (${rows.length} rows)`);
+    console.log(`Imported ${file} -> ${table} (${Array.isArray(rows) ? rows.length : 'N/A'} rows)`);
   }
   db.close();
   console.log('All GTFS tables imported to gtfs.sqlite');

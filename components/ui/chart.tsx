@@ -72,7 +72,9 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     ([_, config]) => config.theme || config.color
   )
 
-  if (!colorConfig.length) {
+  console.log('[ChartStyle] colorConfig type:', typeof colorConfig, Array.isArray(colorConfig), 'length:', colorConfig?.length, colorConfig)
+
+  if (!Array.isArray(colorConfig) || colorConfig.length === 0) {
     return null
   }
 
@@ -81,18 +83,14 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
+            ([theme, prefix]) => `\n${prefix} [data-chart=${id}] {\n${Array.isArray(colorConfig) ? colorConfig
   .map(([key, itemConfig]) => {
     const color =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
       itemConfig.color
     return color ? `  --color-${key}: ${color};` : null
   })
-  .join("\n")}
-}
-`
+  .join("\n") : ''}\n}\n`
           )
           .join("\n"),
       }}
@@ -133,8 +131,10 @@ const ChartTooltipContent = React.forwardRef<
   ) => {
     const { config } = useChart()
 
+    console.log('[ChartTooltipContent] payload type:', typeof payload, Array.isArray(payload), 'length:', payload?.length, payload)
+
     const tooltipLabel = React.useMemo(() => {
-      if (hideLabel || !payload?.length) {
+      if (hideLabel || !Array.isArray(payload) || payload.length === 0) {
         return null
       }
 
@@ -169,7 +169,7 @@ const ChartTooltipContent = React.forwardRef<
       labelKey,
     ])
 
-    if (!active || !payload?.length) {
+    if (!active || !Array.isArray(payload) || payload.length === 0) {
       return null
     }
 
@@ -185,7 +185,7 @@ const ChartTooltipContent = React.forwardRef<
       >
         {!nestLabel ? tooltipLabel : null}
         <div className="grid gap-1.5">
-          {payload.map((item, index) => {
+          {Array.isArray(payload) && payload.map((item, index) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`
             const itemConfig = getPayloadConfigFromPayload(config, item, key)
             const indicatorColor = color || item.payload.fill || item.color
@@ -272,7 +272,9 @@ const ChartLegendContent = React.forwardRef<
   ) => {
     const { config } = useChart()
 
-    if (!payload?.length) {
+    console.log('[ChartLegendContent] payload type:', typeof payload, Array.isArray(payload), 'length:', payload?.length, payload)
+
+    if (!Array.isArray(payload) || payload.length === 0) {
       return null
     }
 
@@ -285,7 +287,7 @@ const ChartLegendContent = React.forwardRef<
           className
         )}
       >
-        {payload.map((item) => {
+        {Array.isArray(payload) ? payload.map((item) => {
           const key = `${nameKey || item.dataKey || "value"}`
           const itemConfig = getPayloadConfigFromPayload(config, item, key)
 
@@ -309,7 +311,7 @@ const ChartLegendContent = React.forwardRef<
               {itemConfig?.label}
             </div>
           )
-        })}
+        }) : null}
       </div>
     )
   }

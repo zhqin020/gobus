@@ -79,15 +79,19 @@ export const reducer = (state: State, action: Action): State => {
     case "ADD_TOAST":
       return {
         ...state,
-        toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
+        toasts: Array.isArray(state.toasts)
+          ? [action.toast, ...state.toasts].slice(0, TOAST_LIMIT)
+          : [action.toast],
       }
 
     case "UPDATE_TOAST":
       return {
         ...state,
-        toasts: state.toasts.map((t) =>
-          t.id === action.toast.id ? { ...t, ...action.toast } : t
-        ),
+        toasts: Array.isArray(state.toasts)
+          ? state.toasts.map((t) =>
+              t.id === action.toast.id ? { ...t, ...action.toast } : t
+            )
+          : [],
       }
 
     case "DISMISS_TOAST": {
@@ -97,7 +101,7 @@ export const reducer = (state: State, action: Action): State => {
       // but I'll keep it here for simplicity
       if (toastId) {
         addToRemoveQueue(toastId)
-      } else {
+      } else if (Array.isArray(state.toasts)) {
         state.toasts.forEach((toast) => {
           addToRemoveQueue(toast.id)
         })
@@ -105,14 +109,16 @@ export const reducer = (state: State, action: Action): State => {
 
       return {
         ...state,
-        toasts: state.toasts.map((t) =>
-          t.id === toastId || toastId === undefined
-            ? {
-                ...t,
-                open: false,
-              }
-            : t
-        ),
+        toasts: Array.isArray(state.toasts)
+          ? state.toasts.map((t) =>
+              t.id === toastId || toastId === undefined
+                ? {
+                    ...t,
+                    open: false,
+                  }
+                : t
+            )
+          : [],
       }
     }
     case "REMOVE_TOAST":
@@ -124,7 +130,9 @@ export const reducer = (state: State, action: Action): State => {
       }
       return {
         ...state,
-        toasts: state.toasts.filter((t) => t.id !== action.toastId),
+        toasts: Array.isArray(state.toasts)
+          ? state.toasts.filter((t) => t.id !== action.toastId)
+          : [],
       }
   }
 }

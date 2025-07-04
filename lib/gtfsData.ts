@@ -63,32 +63,39 @@ export async function loadGtfsDataAuto(gtfsPath: string) {
 
 export function getRouteStops(route_id: string) {
   if (!gtfsData) throw new Error('GTFS data not loaded');
-  // 1. 找出该route的所有trips
   const routeIdStr = String(route_id);
-  const trips = gtfsData['trips'].filter((t: any) => String(t.route_id) === routeIdStr);
-  if (!trips.length) return [];
-  // 2. 取第一个trip_id，查找stop_times
+  console.log('[getRouteStops] gtfsData keys:', Object.keys(gtfsData));
+  console.log('[getRouteStops] gtfsData["trips"] type:', typeof gtfsData['trips'], Array.isArray(gtfsData['trips']), 'length:', Array.isArray(gtfsData['trips']) ? gtfsData['trips'].length : 'N/A');
+  const trips = Array.isArray(gtfsData['trips']) ? gtfsData['trips'].filter((t: any) => String(t.route_id) === routeIdStr) : [];
+  console.log('[getRouteStops] trips:', Array.isArray(trips) ? trips.length : 'N/A', trips[0]);
+  if (!Array.isArray(trips) || trips.length === 0) return [];
   const trip_id = trips[0].trip_id;
-  const stop_times = gtfsData['stop_times'].filter((st: any) => st.trip_id === trip_id);
-  // 3. 查找stop信息
-  const stops = stop_times.map((st: any) => {
-    const stop = gtfsData['stops'].find((s: any) => s.stop_id === st.stop_id);
+  console.log('[getRouteStops] trip_id:', trip_id);
+  console.log('[getRouteStops] gtfsData["stop_times"] type:', typeof gtfsData['stop_times'], Array.isArray(gtfsData['stop_times']), 'length:', Array.isArray(gtfsData['stop_times']) ? gtfsData['stop_times'].length : 'N/A');
+  const stop_times = Array.isArray(gtfsData['stop_times']) ? gtfsData['stop_times'].filter((st: any) => st.trip_id === trip_id) : [];
+  console.log('[getRouteStops] stop_times:', Array.isArray(stop_times) ? stop_times.length : 'N/A', stop_times[0]);
+  const stops = Array.isArray(stop_times) ? stop_times.map((st: any) => {
+    const stop = Array.isArray(gtfsData['stops']) ? gtfsData['stops'].find((s: any) => s.stop_id === st.stop_id) : null;
+    if (!stop) console.log('[getRouteStops] stop not found for stop_id:', st.stop_id);
     return stop ? { ...stop, stop_sequence: st.stop_sequence } : null;
-  }).filter(Boolean);
+  }).filter(Boolean) : [];
+  console.log('[getRouteStops] stops:', Array.isArray(stops) ? stops.length : 'N/A', stops[0]);
   return stops;
 }
 
 export function getRouteShape(route_id: string) {
   if (!gtfsData) throw new Error('GTFS data not loaded');
-  // 1. 找出该route的所有trips
   const routeIdStr = String(route_id);
-  const trips = gtfsData['trips'].filter((t: any) => String(t.route_id) === routeIdStr);
-  if (!trips.length) return [];
-  // 2. 取第一个trip的shape_id
+  console.log('[getRouteShape] gtfsData keys:', Object.keys(gtfsData));
+  console.log('[getRouteShape] gtfsData["trips"] type:', typeof gtfsData['trips'], Array.isArray(gtfsData['trips']), 'length:', Array.isArray(gtfsData['trips']) ? gtfsData['trips'].length : 'N/A');
+  const trips = Array.isArray(gtfsData['trips']) ? gtfsData['trips'].filter((t: any) => String(t.route_id) === routeIdStr) : [];
+  console.log('[getRouteShape] trips:', Array.isArray(trips) ? trips.length : 'N/A', trips[0]);
+  if (!Array.isArray(trips) || trips.length === 0) return [];
   const shape_id = trips[0].shape_id;
-  // 3. 查找shape点
-  const shapes = gtfsData['shapes'].filter((s: any) => s.shape_id === shape_id);
-  // 按shape_pt_sequence排序
+  console.log('[getRouteShape] shape_id:', shape_id);
+  console.log('[getRouteShape] gtfsData["shapes"] type:', typeof gtfsData['shapes'], Array.isArray(gtfsData['shapes']), 'length:', Array.isArray(gtfsData['shapes']) ? gtfsData['shapes'].length : 'N/A');
+  const shapes = Array.isArray(gtfsData['shapes']) ? gtfsData['shapes'].filter((s: any) => s.shape_id === shape_id) : [];
+  console.log('[getRouteShape] shapes:', Array.isArray(shapes) ? shapes.length : 'N/A', shapes[0]);
   shapes.sort((a: any, b: any) => Number(a.shape_pt_sequence) - Number(b.shape_pt_sequence));
-  return shapes.map((s: any) => ({ lat: Number(s.shape_pt_lat), lng: Number(s.shape_pt_lon) }));
+  return Array.isArray(shapes) ? shapes.map((s: any) => ({ lat: Number(s.shape_pt_lat), lng: Number(s.shape_pt_lon) })) : [];
 }

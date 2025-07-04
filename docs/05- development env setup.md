@@ -39,3 +39,7 @@ del pnpm-lock.yaml
 npm cache clean --force
 npm install --legacy-peer-deps
 npm install better-sqlite3 csv-parse --legacy-peer-deps
+
+
+$env:DEBUG="next:*"; pnpm next build
+
