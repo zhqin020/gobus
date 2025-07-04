@@ -30,3 +30,12 @@ npm run schedule-gtfs
 
 手动下载
 npm run download-gtfs
+
+
+### 修复 npm 安装出错的问题
+rd /s /q node_modules
+del package-lock.json
+del pnpm-lock.yaml
+npm cache clean --force
+npm install --legacy-peer-deps
+npm install better-sqlite3 csv-parse --legacy-peer-deps

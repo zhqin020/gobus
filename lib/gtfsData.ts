@@ -27,6 +27,40 @@ export async function loadGtfsData(gtfsZipPath: string) {
   return data;
 }
 
+// 新增：优先从txt目录读取GTFS数据
+export async function loadGtfsDataFromTxt(gtfsDirPath: string) {
+  if (gtfsData) return gtfsData;
+  const data: any = {};
+  const files = fs.readdirSync(gtfsDirPath);
+  for (const file of files) {
+    if (file.endsWith('.txt')) {
+      const content = fs.readFileSync(path.join(gtfsDirPath, file), 'utf-8');
+      const [header, ...rows] = content.split(/\r?\n/).filter(Boolean);
+      const headers = header.split(',');
+      data[file.replace('.txt', '')] = rows.map(row => {
+        const cols = row.split(',');
+        const obj: any = {};
+        headers.forEach((h, i) => { obj[h] = cols[i]; });
+        return obj;
+      });
+    }
+  }
+  gtfsData = data;
+  return data;
+}
+
+// 修改loadGtfsData，自动判断zip或txt目录
+export async function loadGtfsDataAuto(gtfsPath: string) {
+  if (gtfsData) return gtfsData;
+  if (fs.existsSync(gtfsPath) && fs.statSync(gtfsPath).isDirectory()) {
+    return loadGtfsDataFromTxt(gtfsPath);
+  } else if (fs.existsSync(gtfsPath) && gtfsPath.endsWith('.zip')) {
+    return loadGtfsData(gtfsPath);
+  } else {
+    throw new Error('GTFS path not found: ' + gtfsPath);
+  }
+}
+
 export function getRouteStops(route_id: string) {
   if (!gtfsData) throw new Error('GTFS data not loaded');
   // 1. 找出该route的所有trips
