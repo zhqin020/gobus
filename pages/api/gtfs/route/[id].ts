@@ -38,28 +38,51 @@ export default async function handler(
       return res.status(404).json({ error: 'Route not found' })
     }
 
-    // 查询该route的所有站点
-    const stopsQuery = db.prepare(`
-      SELECT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon, st.stop_sequence
-      FROM stops s
-      JOIN stop_times st ON s.stop_id = st.stop_id
-      JOIN trips t ON st.trip_id = t.trip_id
-      WHERE t.route_id = :id
-      GROUP BY s.stop_id
-      ORDER BY st.stop_sequence
+    // 查询该route的所有方向
+    const directionsQuery = db.prepare(`
+      SELECT DISTINCT trip_headsign, direction_id
+      FROM trips
+      WHERE route_id = :id
+      ORDER BY direction_id
     `)
-    stopsQuery.bind({ ':id': id })
-    const stops = []
-    while (stopsQuery.step()) {
-      stops.push(stopsQuery.getAsObject())
+    directionsQuery.bind({ ':id': id })
+    const directions = []
+    while (directionsQuery.step()) {
+      directions.push(directionsQuery.getAsObject())
     }
-    stopsQuery.free()
+    directionsQuery.free()
+
+    // 查询每个方向的站点
+    const stopsByDirection = []
+    for (const dir of directions) {
+      const stopsQuery = db.prepare(`
+        SELECT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon, st.stop_sequence
+        FROM stops s
+        JOIN stop_times st ON s.stop_id = st.stop_id
+        JOIN trips t ON st.trip_id = t.trip_id
+        WHERE t.route_id = :id AND t.direction_id = :direction
+        GROUP BY s.stop_id
+        ORDER BY st.stop_sequence
+      `)
+      stopsQuery.bind({ ':id': id, ':direction': dir.direction_id })
+      const stops = []
+      while (stopsQuery.step()) {
+        stops.push(stopsQuery.getAsObject())
+      }
+      stopsQuery.free()
+
+      stopsByDirection.push({
+        direction_id: dir.direction_id,
+        trip_headsign: dir.trip_headsign,
+        stops
+      })
+    }
 
     db.close()
 
     return res.status(200).json({
       ...routeResult,
-      stops
+      directions: stopsByDirection
     })
   } catch (error) {
     console.error('Error fetching route data:', error)

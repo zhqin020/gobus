@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
+import StopsView from "./components/StopsView"
 import dynamic from "next/dynamic"
 import {
   Search,
@@ -561,93 +562,9 @@ export default function TransitApp() {
       });
   }, [selectedRoute]);
 
-  const renderStopsView = () => (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="relative h-64 bg-gray-800">
-        {selectedRoute && (
-          <div className="absolute top-4 left-4">
-            <div className="text-4xl font-bold text-blue-400">{selectedRoute.route_short_name || selectedRoute}</div>
-            <div className="text-lg text-white mt-2">{selectedRoute.route_long_name || ''}</div>
-            {selectedRoute.agency_name && <div className="text-sm text-gray-400 mt-1">{selectedRoute.agency_name}</div>}
-            {selectedRoute.route_desc && <div className="text-sm text-gray-400 mt-1">{selectedRoute.route_desc}</div>}
-          </div>
-        )}
-        <div className="absolute top-4 right-4 flex flex-col gap-2 z-10 pointer-events-auto">
-          <button
-            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-[#3DDC97] focus:outline-none"
-            onClick={handleRecenter}
-            aria-label="回到当前位置"
-          >
-            <MapPin className="w-6 h-6 text-[#3DDC97]" />
-          </button>
-          <button
-            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-transparent hover:border-[#3DDC97] focus:outline-none"
-            onClick={() => setCurrentView("settings")}
-            aria-label="设置"
-          >
-            <Settings className="w-6 h-6 text-gray-400 hover:text-[#3DDC97]" />
-          </button>
-          <button
-            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-blue-400 focus:outline-none mt-2"
-            onClick={() => setReverseDirection(r => !r)}
-            aria-label="反转线路方向"
-          >
-            <ArrowRight className={`w-6 h-6 text-blue-400 transition-transform ${reverseDirection ? 'rotate-180' : ''}`} />
-          </button>
-        </div>
-        {/* 地图显示线路和站点 */}
-        <div className="absolute inset-0" style={{ width: '100%', height: '100%' }}>
-          {routePolyline && Array.isArray(routePolyline) && routePolyline.length > 0 && userLocation && (
-            <MapView
-              userLocation={userLocation}
-              routePolyline={reverseDirection ? [...(routePolyline ?? [])].reverse() : (routePolyline ?? [])}
-              stops={reverseDirection ? [...(routeStops ?? [])].reverse() : (routeStops ?? [])}
-              reverseDirection={reverseDirection}
-            />
-          )}
-        </div>
-      </div>
-
-      <div className="p-4 border-b border-gray-700">
-        {/* 可根据需要显示起点/终点等 */}
-        {Array.isArray(routeStops) && routeStops.length > 0 && (
-          <div className="flex items-center gap-2">
-            <ArrowRight className="w-5 h-5 text-blue-400" />
-            <span className="font-medium">{reverseDirection ? routeStops[routeStops.length-1]?.stop_name : routeStops[0]?.stop_name}</span>
-          </div>
-        )}
-        {Array.isArray(routeStops) && routeStops.length > 0 && (
-          <div className="text-gray-400 text-sm">{reverseDirection ? routeStops[routeStops.length-1]?.stop_desc : routeStops[0]?.stop_desc}</div>
-        )}
-      </div>
-
-      <div className="p-4">
-        {loadingStops ? (
-          <div className="text-gray-400">加载中...</div>
-        ) : (
-          <div className="space-y-4">
-            {Array.isArray(routeStops) && routeStops.map((stop, idx) => (
-              <div key={stop.stop_id} className="flex items-center gap-4">
-                <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
-                <div className="flex-1">
-                  <div className="font-medium">{stop.stop_name}</div>
-                  {/* 换乘线路可扩展：如有 transfers，可在此处渲染 */}
-                  {/* <div className="flex items-center gap-2 mt-1">
-                    <Bus className="w-4 h-4 text-gray-400" />
-                    <div className="flex gap-1">
-                      {stop.transferRoutes?.map((route: string) => (
-                        <Badge key={route} variant="secondary" className="bg-blue-600 text-white text-xs">{route}</Badge>
-                      ))}
-                    </div>
-                  </div> */}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
+  const handleDirectionChange = (reverse: boolean) => {
+    setReverseDirection(reverse)
+  }
 
   const renderArrivalsView = () => (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -788,7 +705,16 @@ export default function TransitApp() {
     <div className="max-w-md mx-auto bg-gray-900">
       {currentView === "home" && renderHomeView()}
       {currentView === "search" && renderSearchView()}
-      {currentView === "stops" && renderStopsView()}
+      {currentView === "stops" && (
+        <StopsView
+          selectedRoute={selectedRoute}
+          routePolyline={routePolyline}
+          userLocation={userLocation}
+          loadingStops={loadingStops}
+          onRecenter={handleRecenter}
+          onDirectionChange={handleDirectionChange}
+        />
+      )}
       {currentView === "arrivals" && renderArrivalsView()}
       {currentView === "subway" && renderSubwayView()}
       {currentView === "settings" && renderSettingsView()}
