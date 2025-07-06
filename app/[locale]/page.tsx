@@ -531,36 +531,67 @@ export default function TransitApp() {
     </div>
   )
 
-  // 加载选中线路的 stops 和 polyline
+  // 加载选中线路的 stops、polyline 和 directions
   useEffect(() => {
-    if (!selectedRoute) return;
-    console.log('[Stops useEffect] selectedRoute:', selectedRoute);
-    const url = `/api/gtfs/route/${selectedRoute.route_id}`;
-    console.log('[Stops useEffect] fetch url:', url);
-    setLoadingStops(true);
-    fetch(url)
-      .then(res => {
-        console.log('[Stops useEffect] fetch response status:', res.status);
-        return res.json().then(data => ({ status: res.status, data }));
-      })
-      .then(({ status, data }) => {
-        console.log('[Stops useEffect] fetch data:', data);
-        if (status === 200) {
-          setRouteStops(data.stops || []);
-          setRoutePolyline(data.polyline || []);
-        } else {
+    // 仅在 selectedRoute 变化且有效时才进行数据获取
+    if (selectedRoute && selectedRoute.route_id) {
+      console.log('[Stops useEffect] selectedRoute:', selectedRoute);
+      
+      setLoadingStops(true);
+      
+      // 获取路线详细信息
+      const routeUrl = `/api/gtfs/route/${selectedRoute.route_id}`;
+      console.log('[Stops useEffect] fetch route url:', routeUrl);
+      
+      // 获取方向信息
+      const directionsUrl = `/api/gtfs/directions/${selectedRoute.route_id}`;
+      console.log('[Stops useEffect] fetch directions url:', directionsUrl);
+
+      fetch(routeUrl)
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+          return res.json();
+        })
+        .then(routeData => {
+          console.log('[Stops useEffect] route data:', routeData);
+          
+          // 验证并处理返回数据
+          console.log('Full route data received:', routeData);
+          
+          // 检查服务器连接状态
+          if (!routeData || typeof routeData !== 'object') {
+            console.warn('Invalid route data received - server may be down');
+            throw new Error('Invalid route data received - server may be down');
+          }
+
+          // 确保至少有一个有效字段
+          if (!routeData.stops && !routeData.polyline && !routeData.directions) {
+            console.warn('No valid route data received - empty response');
+            throw new Error('No valid route data received - empty response');
+          }
+
+          // 更新selectedRoute包含可用数据
+          setSelectedRoute(prev => ({
+            ...prev,
+            stops: routeData.stops || prev.stops || [],
+            polyline: routeData.polyline || prev.polyline || [],
+            directions: routeData.directions || prev.directions || []
+          }));
+          
+          setRouteStops(routeData.stops || []);
+          setRoutePolyline(routeData.polyline || []);
+          setLoadingStops(false);
+        })
+        .catch(error => {
+          console.error('[Stops useEffect] Error:', error);
           setRouteStops([]);
           setRoutePolyline([]);
-        }
-        setLoadingStops(false);
-      })
-      .catch((err) => {
-        console.error('[Stops useEffect] fetch error:', err);
-        setRouteStops([]);
-        setRoutePolyline([]);
-        setLoadingStops(false);
-      });
-  }, [selectedRoute]);
+          setLoadingStops(false);
+        });
+    }
+  }, [selectedRoute?.route_id]);
 
   const handleDirectionChange = (reverse: boolean) => {
     setReverseDirection(reverse)
