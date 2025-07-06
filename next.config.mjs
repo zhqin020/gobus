@@ -11,7 +11,21 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  webpack(config) {
+  async rewrites() {
+    return [
+      {
+        source: '/:locale/gtfs.sqlite',
+        destination: '/gtfs.sqlite',
+      },
+    ];
+  },
+  webpack(config, { isServer }) {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+      };
+    }
     config.resolve.alias = {
       ...config.resolve.alias,
       "next-intl/config": path.resolve("./next-intl.config.ts"),

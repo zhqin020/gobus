@@ -28,8 +28,7 @@ import "leaflet/dist/leaflet.css"
 import { useTranslations } from "next-intl"
 import { useRouter } from "next/navigation"
 
-const MapView = dynamic(() => import("@/components/MapView"), { ssr: false })
-const GtfsSqlDemo = dynamic(() => import('@/components/GtfsSqlDemo.client'), { ssr: false });
+const MapView = dynamic(() => import("@/components/MapView"), { ssr: false }) 
 
 export default function TransitApp() {
   const t = useTranslations()
@@ -197,11 +196,8 @@ export default function TransitApp() {
 
   const renderHomeView = () => (
     <div className="min-h-screen bg-[#181B1F] text-white">
-      <div className="relative h-80 bg-[#181B1F] overflow-hidden">
-        {/* GTFS SQLite Demo 区块 */}
-        <div className="absolute top-4 left-4 z-30 bg-black bg-opacity-70 rounded p-2">
-          <GtfsSqlDemo />
-        </div>
+      <div className="relative h-80 bg-[#181B1F] overflow-hidden"> 
+ 
         {userLocation ? (
           <MapView ref={mapRef} userLocation={userLocation} />
         ) : (

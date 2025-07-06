@@ -16,7 +16,7 @@ export default function GtfsSqlDemo() {
       const SQL = await initSqlJs({
         locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${file}`
       });
-      const res = await fetch('/gtfs.sqlite');
+      const res = await fetch(`${window.location.origin}/gtfs.sqlite`);
       const buf = await res.arrayBuffer();
       db = new SQL.Database(new Uint8Array(buf));
       const stmt = db.prepare('SELECT route_id, route_short_name, route_long_name FROM routes LIMIT 20');
