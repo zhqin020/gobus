@@ -179,6 +179,7 @@ export default function TransitApp() {
   }
 
   const handleRouteSelect = (route: any) => {
+    console.log('[handleRouteSelect] selected route:', route);
     setSelectedRoute(route)
     setCurrentView("stops")
   }
@@ -239,7 +240,11 @@ export default function TransitApp() {
         )}
         {((searching ? searchResults : routes) ?? []).length > 0 ? (
           Array.isArray(searching ? searchResults : routes) && (searching ? searchResults : routes).map((route) => (
-            <Card key={route.route_id} className="bg-[#23272F] border border-[#23272F] shadow-md cursor-pointer" onClick={() => handleRouteSelect(route)}>
+            <Card key={route.route_id} className="bg-[#23272F] border border-[#23272F] shadow-md cursor-pointer"
+              onClick={() => {
+                console.log('[HomeView] Card onClick, route:', route);
+                handleRouteSelect(route);
+              }}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -503,9 +508,14 @@ export default function TransitApp() {
                 <div className="font-medium">{route.route_long_name}</div>
                 <div className="flex items-center gap-2 mt-1">
                   <Bus className="w-4 h-4 text-gray-400" />
-                <div className="flex gap-2">
+                  <div className="flex gap-2">
                     {(typeof route.route_short_name === 'string' ? route.route_short_name.split(',') : []).map((r: string) => (
-                      <Badge key={r} variant="secondary" className="bg-blue-600 text-white cursor-pointer" onClick={() => handleRouteSelect(r)}>
+                      // 修正：点击时传递 route 对象，而不是字符串
+                      <Badge key={r} variant="secondary" className="bg-blue-600 text-white cursor-pointer"
+                        onClick={() => {
+                          console.log('[SearchView] Badge onClick, route:', route);
+                          handleRouteSelect(route);
+                        }}>
                         {r}
                       </Badge>
                     ))}
@@ -523,15 +533,28 @@ export default function TransitApp() {
   // 加载选中线路的 stops 和 polyline
   useEffect(() => {
     if (!selectedRoute) return;
+    console.log('[Stops useEffect] selectedRoute:', selectedRoute);
+    const url = `/api/gtfs/route/${selectedRoute.route_id}`;
+    console.log('[Stops useEffect] fetch url:', url);
     setLoadingStops(true);
-    fetch(`/api/gtfs/route/${selectedRoute.route_id}`)
-      .then(res => res.json())
-      .then(data => {
-        setRouteStops(data.stops || []);
-        setRoutePolyline(data.polyline || []);
+    fetch(url)
+      .then(res => {
+        console.log('[Stops useEffect] fetch response status:', res.status);
+        return res.json().then(data => ({ status: res.status, data }));
+      })
+      .then(({ status, data }) => {
+        console.log('[Stops useEffect] fetch data:', data);
+        if (status === 200) {
+          setRouteStops(data.stops || []);
+          setRoutePolyline(data.polyline || []);
+        } else {
+          setRouteStops([]);
+          setRoutePolyline([]);
+        }
         setLoadingStops(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[Stops useEffect] fetch error:', err);
         setRouteStops([]);
         setRoutePolyline([]);
         setLoadingStops(false);

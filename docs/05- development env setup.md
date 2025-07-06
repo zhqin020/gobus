@@ -43,3 +43,7 @@ npm install better-sqlite3 csv-parse --legacy-peer-deps
 
 $env:DEBUG="next:*"; pnpm next build
 pnpm next dev
+
+GET /api/gtfs/route/6725 404 in 92ms
+
+pnpm build --debug ;pnpm next dev
