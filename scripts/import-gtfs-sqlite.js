@@ -50,22 +50,44 @@ function insertRows(db, table, rows) {
 }
 
 function importAll() {
-  if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
-  const db = new Database(DB_PATH);
-  const files = fs.readdirSync(GTFS_DIR).filter(f => f.endsWith('.txt'));
-  for (const file of files) {
-    const table = file.replace('.txt', '');
-    const rows = parseCsv(path.join(GTFS_DIR, file));
-    if (!Array.isArray(rows) || rows.length === 0) {
-      console.log(`Skip ${file} (empty)`);
-      continue;
+  console.log('[GTFS Import] Starting import process');
+  try {
+    if (fs.existsSync(DB_PATH)) {
+      console.log('[GTFS Import] Removing existing database file');
+      fs.unlinkSync(DB_PATH);
     }
-    createTable(db, table, rows);
-    insertRows(db, table, rows);
-    console.log(`Imported ${file} -> ${table} (${Array.isArray(rows) ? rows.length : 'N/A'} rows)`);
+
+    console.log('[GTFS Import] Creating new SQLite database');
+    const db = new Database(DB_PATH);
+    
+    const files = fs.readdirSync(GTFS_DIR).filter(f => f.endsWith('.txt'));
+    console.log(`[GTFS Import] Found ${files.length} GTFS files to import`);
+
+    for (const file of files) {
+      const table = file.replace('.txt', '');
+      console.log(`[GTFS Import] Processing ${file} -> ${table}`);
+      
+      const rows = parseCsv(path.join(GTFS_DIR, file));
+      if (!Array.isArray(rows) || rows.length === 0) {
+        console.warn(`[GTFS Import] Skip ${file} - empty or invalid data`);
+        continue;
+      }
+
+      console.log(`[GTFS Import] Creating table ${table}`);
+      createTable(db, table, rows);
+
+      console.log(`[GTFS Import] Inserting ${rows.length} rows into ${table}`);
+      insertRows(db, table, rows);
+
+      console.log(`[GTFS Import] Completed ${file} -> ${table} (${rows.length} rows)`);
+    }
+
+    db.close();
+    console.log('[GTFS Import] Successfully imported all GTFS tables to gtfs.sqlite');
+  } catch (err) {
+    console.error('[GTFS Import] Critical error during import:', err);
+    process.exit(1);
   }
-  db.close();
-  console.log('All GTFS tables imported to gtfs.sqlite');
 }
 
 if (require.main === module) {

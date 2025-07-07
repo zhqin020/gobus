@@ -79,30 +79,23 @@ const MapView = forwardRef<
     });
   }, []);
 
+
   // 处理方向反转
-  const polylinePoints = useMemo(() => {
-    if (!routePolyline) return undefined;
-    return reverseDirection ? [...routePolyline].reverse() : routePolyline;
-  }, [routePolyline, reverseDirection]);
+  const sortedStops = useMemo(() => {
+    if (!stops) return [];
+    const sorted = [...stops].sort((a, b) => (a.stop_sequence ?? 0) - (b.stop_sequence ?? 0));
+    return reverseDirection ? sorted.reverse() : sorted;
+  }, [stops, reverseDirection]);
 
   // Convert stops to { lat, lng, name, transferRoutes? } format and filter invalid ones
-  const validStops = Array.isArray(stops)
-    ? stops
-        .filter(
-          stop =>
-            stop &&
-            typeof stop.stop_lat === "number" &&
-            typeof stop.stop_lon === "number" &&
-            Number.isFinite(stop.stop_lat) &&
-            Number.isFinite(stop.stop_lon)
-        )
-        .map(stop => ({
-          lat: stop.stop_lat,
-          lng: stop.stop_lon,
-          name: stop.stop_name,
-          transferRoutes: stop.transferRoutes || [],
-        }))
-    : [];
+  const validStops = sortedStops
+    .filter(stop => stop && typeof stop.stop_lat === "number" && typeof stop.stop_lon === "number")
+    .map(stop => ({
+      lat: stop.stop_lat,
+      lng: stop.stop_lon,
+      name: stop.stop_name,
+      transferRoutes: stop.transferRoutes || [],
+    }));
 
   return (
     <MapContainer
@@ -121,8 +114,8 @@ const MapView = forwardRef<
         </Marker>
       )}
       {/* 绘制线路 polyline，颜色改为浅蓝色，宽度等于小圆圈半径 */}
-      {polylinePoints && (
-        <Polyline positions={polylinePoints.map(p => [p.lat, p.lng])} pathOptions={{ color: "#7ec8e3", weight: 7 }} />
+      {validStops.length > 0 && (
+        <Polyline positions={validStops.map(p => [p.lat, p.lng])} pathOptions={{ color: "#7ec8e3", weight: 7 }} />
       )}
       {/* 绘制所有站点，首末站特殊处理 */}
       {validStops && Array.isArray(validStops) && validStops.map((stop, idx) => {

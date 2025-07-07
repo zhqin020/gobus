@@ -31,9 +31,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (isNaN(userLat) || isNaN(userLng)) {
       return res.status(400).json({ error: 'Invalid lat/lng' });
     }
-    // 下载 GTFS zip
+    // 第一阶段：添加版本检查基础
     const gtfsRes = await fetch(GTFS_URL)
     if (!gtfsRes.ok) throw new Error('Failed to download GTFS zip')
+    
+    // 记录版本信息
+    const lastModified = gtfsRes.headers.get('last-modified')
+    const etag = gtfsRes.headers.get('etag')
+    console.log(`[GTFS Version] ${new Date().toISOString()} - ETag: ${etag}`)
+    
+    // 保持现有下载逻辑
     const buffer = Buffer.from(await gtfsRes.arrayBuffer())
     const zip = new AdmZip(buffer)
     // 读取 stops.txt
