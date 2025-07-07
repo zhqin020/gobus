@@ -40,10 +40,11 @@ export async function GET(req: NextRequest, { params }: { params: { route_id: st
       }
       return NextResponse.json({ error: 'Route not found' }, { status: 404 });
     }
-    console.log('[API] Found route:', route.route_id, 'stops:', Array.isArray(route.stops) ? route.stops.length : 0, 'polyline:', Array.isArray(route.polyline) ? route.polyline.length : 0);
+    console.log('[API] Found route:', route.route_id, 'stops:', Array.isArray(route.stops) ? route.stops.length : 0, 'polyline:', Array.isArray(route.polyline) ? route.polyline.length : 0, 'directions:', Array.isArray(route.directions) ? route.directions.length : 0);
     return NextResponse.json({
       stops: route.stops || [],
       polyline: route.polyline || [],
+      directions: route.directions || [],
     });
   } catch (e: any) {
     console.error('[API] Error reading GTFS data:', e.message);

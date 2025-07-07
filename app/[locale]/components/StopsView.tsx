@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
-import { ArrowRight } from "lucide-react"
+import { useState, useEffect } from "react"
 import dynamic from "next/dynamic"
+import { motion, useAnimation } from "framer-motion"
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false })
 
@@ -46,85 +46,173 @@ export default function StopsView({
   onRecenter,
   onDirectionChange
 }: StopsViewProps) {
-  const [reverseDirection, setReverseDirection] = useState(false)
+  const [currentDirectionIndex, setCurrentDirectionIndex] = useState(0)
+  const controls = useAnimation()
 
-  const handleDirectionChange = () => {
-    const newDirection = !reverseDirection
-    setReverseDirection(newDirection)
-    onDirectionChange(newDirection)
+  // 拖动面板吸附位置
+  const [panelPositions, setPanelPositions] = useState({ top: 100, middle: 500, bottom: 800 })
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setPanelPositions({
+        top: 100,
+        middle: window.innerHeight * 0.6,
+        bottom: window.innerHeight - 140,
+      })
+      controls.start({ y: window.innerHeight * 0.6 })
+    }
+  }, [controls])
+
+  const onDragEnd = (event: any, info: any) => {
+    const { point, velocity } = info
+    const currentY = point.y
+    const { top, middle, bottom } = panelPositions
+    if (Math.abs(velocity.y) > 300) {
+      controls.start({ y: velocity.y < 0 ? top : bottom })
+    } else {
+      const diffTop = Math.abs(currentY - top)
+      const diffMiddle = Math.abs(currentY - middle)
+      const diffBottom = Math.abs(currentY - bottom)
+      if (diffTop < diffMiddle && diffTop < diffBottom) controls.start({ y: top })
+      else if (diffMiddle < diffTop && diffMiddle < diffBottom) controls.start({ y: middle })
+      else controls.start({ y: bottom })
+    }
   }
 
-  // 确保selectedRoute和directions存在
-  if (!selectedRoute || !selectedRoute.directions) {
+  if (!selectedRoute) {
+    console.error('StopsView: selectedRoute is null or undefined')
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-4">
-        <div className="text-gray-400">加载路线数据中...</div>
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-red-500">错误: 未选择路线</div>
       </div>
     )
   }
 
-  // 获取当前方向的数据
-  const directionIndex = reverseDirection ? 
-    Math.min(1, selectedRoute.directions.length - 1) : 0
-  const currentDirection = selectedRoute.directions[directionIndex]
-  const currentStops = currentDirection?.stops || []
-  const currentHeadSign = currentDirection?.trip_headsign || ''
+  if (loadingStops) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <span className="ml-4">加载路线数据中...</span>
+      </div>
+    )
+  }
+
+  if (!selectedRoute.directions || selectedRoute.directions.length === 0) {
+    console.warn('StopsView: No directions data available', selectedRoute)
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-yellow-500">警告: 该路线无方向数据</div>
+      </div>
+    )
+  }
+
+  const directions = selectedRoute.directions
+  const currentDirection = directions[currentDirectionIndex] || directions[0]
+  
+  if (!currentDirection?.stops) {
+    console.error('StopsView: No stops data for direction', currentDirection)
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-red-500">错误: 无站点数据</div>
+      </div>
+    )
+  }
+
+  const stops = currentDirection.stops
+  const destination = currentDirection?.trip_headsign || ""
+  // 计算当前位置到终点的剩余站点数（如有定位，可进一步优化）
+  const stopsRemaining = stops.length > 0 ? `${stops.length} 站` : "无"
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="relative h-64 bg-gray-800">
-        <div className="absolute top-4 left-4">
-          <div className="text-4xl font-bold text-blue-400">{selectedRoute.route_short_name}</div>
-          <div className="text-lg text-white mt-2">{selectedRoute.route_long_name}</div>
-        </div>
-        <div className="absolute top-4 right-4 flex flex-col gap-2 z-10 pointer-events-auto">
-          <button
-            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-blue-400 focus:outline-none"
-            onClick={handleDirectionChange}
-            aria-label="反转线路方向"
-          >
-            <ArrowRight className={`w-6 h-6 text-blue-400 transition-transform ${reverseDirection ? 'rotate-180' : ''}`} />
-          </button>
-        </div>
-        {/* 地图显示线路和站点 */}
-        <div className="absolute inset-0" style={{ width: '100%', height: '100%' }}>
-          {routePolyline && Array.isArray(routePolyline) && routePolyline.length > 0 && userLocation && (
-            <MapView
-              userLocation={userLocation}
-              routePolyline={reverseDirection ? [...routePolyline].reverse() : routePolyline}
-              stops={reverseDirection ? [...currentStops].reverse() : currentStops}
-              reverseDirection={reverseDirection}
-            />
-          )}
-        </div>
+    <div className="relative h-screen w-full overflow-hidden font-sans">
+      {/* 1. 背景地图 */}
+      <div className="absolute inset-0 z-0">
+        <MapView
+          userLocation={userLocation}
+          routePolyline={routePolyline}
+          stops={stops}
+          reverseDirection={false}
+        />
       </div>
 
-      <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center gap-2">
-          <ArrowRight className="w-5 h-5 text-blue-400" />
-          <span className="font-medium">{currentHeadSign}</span>
+      {/* 2. 可拖动面板 */}
+      <motion.div
+        drag="y"
+        onDragEnd={onDragEnd}
+        animate={controls}
+        transition={{ type: "spring", stiffness: 400, damping: 40 }}
+        dragConstraints={{ top: 0, bottom: typeof window !== "undefined" ? window.innerHeight : 900 }}
+        dragElastic={{ top: 0.05, bottom: 0.05 }}
+        className="absolute top-0 left-0 right-0 h-full bg-[#23272F] rounded-t-2xl shadow-2xl flex flex-col z-10"
+        style={{ touchAction: "none" }}
+      >
+        {/* 面板 Header (可拖动区域) */}
+        <div className="p-4 flex-shrink-0 text-center cursor-grab active:cursor-grabbing">
+          <div className="w-12 h-1.5 bg-gray-600 rounded-full mx-auto mb-2" />
+          <div className="text-3xl font-bold text-blue-400">{selectedRoute.route_short_name}</div>
+          <div className="text-lg text-white mt-1">{selectedRoute.route_long_name}</div>
         </div>
-      </div>
 
-      <div className="p-4">
-        {loadingStops ? (
-          <div className="text-gray-400">加载中...</div>
-        ) : currentStops.length === 0 ? (
-          <div className="text-gray-400">暂无站点数据</div>
-        ) : (
-          <div className="space-y-4">
-            {currentStops.map((stop) => (
-              <div key={`${stop.stop_id}-${directionIndex}`} className="flex items-center gap-4">
-                <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
-                <div className="flex-1">
-                  <div className="font-medium">{stop.stop_name}</div>
-                  {stop.stop_desc && <div className="text-gray-400 text-sm">{stop.stop_desc}</div>}
-                </div>
-              </div>
+        {/* 3. 方向切换按钮 - 横向滚动 */}
+        <div className="px-4 pb-2 flex-shrink-0">
+          <div className="flex overflow-x-auto no-scrollbar gap-2">
+            {directions.map((dir, idx) => (
+              <button
+                key={`${dir.direction_id}_${dir.trip_headsign}_${selectedRoute.route_id}`}
+                onClick={() => setCurrentDirectionIndex(idx)}
+                className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-semibold transition-colors
+                  ${currentDirectionIndex === idx ? "bg-blue-500 text-white" : "bg-gray-700 text-gray-300"}
+                `}
+                style={{
+                  minWidth: "max-content",
+                  maxWidth: 240,
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {dir.trip_headsign}
+              </button>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+
+        {/* 4. 终点站和剩余站点数 */}
+        <div className="px-4 pb-2 flex-shrink-0">
+          <div className="flex items-center gap-3 mt-2">
+            <span className="text-white text-xl font-bold">{destination}</span>
+            <span className="text-gray-400 text-sm">{stopsRemaining}</span>
+          </div>
+        </div>
+
+        {/* 5. 站点列表 */}
+        <div className="overflow-y-auto px-4 flex-grow pb-4">
+          {stops.length === 0 ? (
+            <div className="text-gray-400 mt-4">暂无站点数据</div>
+          ) : (
+            stops.map((stop, idx) => (
+              <div key={stop.stop_id} className="flex items-start gap-4 py-3 border-b border-gray-700">
+                <div className="flex flex-col items-center mr-2">
+                  <div className="w-3 h-3 rounded-full border-2 border-blue-400 bg-blue-400"></div>
+                  {idx !== stops.length - 1 && (
+                    <div className="w-0.5 flex-grow bg-blue-400" style={{ minHeight: "2rem" }}></div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="font-medium text-white">{stop.stop_name}</div>
+                  {/* 预计到达时间（如有） */}
+                  {/* <div className="text-yellow-400 text-xs font-semibold mt-1">{stop.time}</div> */}
+                  {/* 换乘车次（如有） */}
+                  {/* <div className="flex flex-wrap gap-1 mt-1">
+                    {stop.transfers?.map((t: string, i: number) => (
+                      <span key={i} className="bg-gray-600 text-gray-200 text-xs font-bold px-2 py-0.5 rounded-full">{t}</span>
+                    ))}
+                  </div> */}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </motion.div>
     </div>
   )
 }
+
+// 只需安装 framer-motion，无需修改此文件内容
