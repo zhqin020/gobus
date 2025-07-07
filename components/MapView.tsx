@@ -74,10 +74,24 @@ const MapView = forwardRef<
     return reverseDirection ? [...routePolyline].reverse() : routePolyline;
   }, [routePolyline, reverseDirection]);
 
-  const stopMarkers = useMemo(() => {
-    if (!stops) return undefined;
-    return reverseDirection ? [...stops].reverse() : stops;
-  }, [stops, reverseDirection]);
+  // Convert stops to { lat, lng, name, transferRoutes? } format and filter invalid ones
+  const validStops = Array.isArray(stops)
+    ? stops
+        .filter(
+          stop =>
+            stop &&
+            typeof stop.stop_lat === "number" &&
+            typeof stop.stop_lon === "number" &&
+            Number.isFinite(stop.stop_lat) &&
+            Number.isFinite(stop.stop_lon)
+        )
+        .map(stop => ({
+          lat: stop.stop_lat,
+          lng: stop.stop_lon,
+          name: stop.stop_name,
+          transferRoutes: stop.transferRoutes || [],
+        }))
+    : [];
 
   return (
     <MapContainer
@@ -100,26 +114,20 @@ const MapView = forwardRef<
         <Polyline positions={polylinePoints.map(p => [p.lat, p.lng])} pathOptions={{ color: "blue" }} />
       )}
       {/* 绘制所有站点 marker */}
-      {markerIcon && stopMarkers && Array.isArray(stopMarkers) && stopMarkers.map((stop, idx) => {
-        if (typeof stop.lat !== 'number' || typeof stop.lng !== 'number') {
-          console.warn('Invalid stop data - missing coordinates:', stop)
-          return null
-        }
-        return (
-          <Marker key={idx} position={{ lat: stop.lat, lng: stop.lng }} icon={markerIcon}>
-            <Popup>
-              <div>
-                <div>{stop.name}</div>
-                {stop.transferRoutes && Array.isArray(stop.transferRoutes) && stop.transferRoutes.length > 0 && (
-                  <div style={{ fontSize: '0.9em', color: '#888' }}>
-                    换乘: {stop.transferRoutes.join(', ')}
-                  </div>
-                )}
-              </div>
-            </Popup>
-          </Marker>
-        )
-      })}
+      {markerIcon && validStops && Array.isArray(validStops) && validStops.map((stop, idx) => (
+        <Marker key={idx} position={{ lat: stop.lat, lng: stop.lng }} icon={markerIcon}>
+          <Popup>
+            <div>
+              <div>{stop.name}</div>
+              {stop.transferRoutes && Array.isArray(stop.transferRoutes) && stop.transferRoutes.length > 0 && (
+                <div style={{ fontSize: '0.9em', color: '#888' }}>
+                  换乘: {stop.transferRoutes.join(', ')}
+                </div>
+              )}
+            </div>
+          </Popup>
+        </Marker>
+      ))}
       <RecenterControl ref={recenterRef} center={userLocation} />
     </MapContainer>
   )
