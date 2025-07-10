@@ -78,7 +78,10 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/sqlite3": "^5.1.0",
     "postcss": "^8.5",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
   }

@@ -1,10 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import fetch from 'node-fetch'
-import AdmZip from 'adm-zip'
-import { parse } from 'csv-parse/sync'
-
-// Updated GTFS static data link
-const GTFS_URL = 'https://gtfs-static.translink.ca/gtfs/google_transit.zip'
+import sqlite3 from 'sqlite3'
+import { open } from 'sqlite'
+import fs from 'fs'
+import path from 'path'
+import { gtfsCache } from '../../lib/cache'
 
 // Haversine formula to calculate distance between two lat/lng points (in meters)
 function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -20,51 +19,45 @@ function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
   return R * c;
 }
 
+const versionFilePath = path.join(process.cwd(), 'data/gtfs_version.json')
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const { lat, lng } = req.query;
+    const { lat, lng } = req.query
     if (!lat || !lng) {
-      return res.status(400).json({ error: 'Missing lat/lng query params' });
+      return res.status(400).json({ error: 'Missing lat/lng query params' })
     }
-    const userLat = parseFloat(lat as string);
-    const userLng = parseFloat(lng as string);
+    const userLat = parseFloat(lat as string)
+    const userLng = parseFloat(lng as string)
     if (isNaN(userLat) || isNaN(userLng)) {
-      return res.status(400).json({ error: 'Invalid lat/lng' });
+      return res.status(400).json({ error: 'Invalid lat/lng' })
     }
-    // 第一阶段：添加版本检查基础
-    const gtfsRes = await fetch(GTFS_URL)
-    if (!gtfsRes.ok) throw new Error('Failed to download GTFS zip')
-    
-    // 记录版本信息
-    const lastModified = gtfsRes.headers.get('last-modified')
-    const etag = gtfsRes.headers.get('etag')
-    console.log(`[GTFS Version] ${new Date().toISOString()} - ETag: ${etag}`)
-    
-    // 保持现有下载逻辑
-    const buffer = Buffer.from(await gtfsRes.arrayBuffer())
-    const zip = new AdmZip(buffer)
-    // 读取 stops.txt
-    const stopsEntry = zip.getEntry('stops.txt')
-    if (!stopsEntry) throw new Error('stops.txt not found in GTFS zip')
-    const stopsCsv = stopsEntry.getData().toString('utf-8')
-    const stops = parse(stopsCsv, { columns: true, skip_empty_lines: true })
-    // 读取 stop_times.txt
-    const stopTimesEntry = zip.getEntry('stop_times.txt')
-    if (!stopTimesEntry) throw new Error('stop_times.txt not found in GTFS zip')
-    const stopTimesCsv = stopTimesEntry.getData().toString('utf-8')
-    const stopTimes = parse(stopTimesCsv, { columns: true, skip_empty_lines: true })
-    // 读取 routes.txt
-    const routesEntry = zip.getEntry('routes.txt')
-    if (!routesEntry) throw new Error('routes.txt not found in GTFS zip')
-    const routesCsv = routesEntry.getData().toString('utf-8')
-    const routes = parse(routesCsv, { columns: true, skip_empty_lines: true })
-    // 读取 trips.txt
-    const tripsEntry = zip.getEntry('trips.txt')
-    if (!tripsEntry) throw new Error('trips.txt not found in GTFS zip')
-    const tripsCsv = tripsEntry.getData().toString('utf-8')
-    const trips = parse(tripsCsv, { columns: true, skip_empty_lines: true })
 
-    // 找到500米内的stop_id
+    let currentEtag = ''
+    if (fs.existsSync(versionFilePath)) {
+      try {
+        const versionData = JSON.parse(fs.readFileSync(versionFilePath, 'utf-8'))
+        currentEtag = versionData.etag || ''
+      } catch {
+        currentEtag = ''
+      }
+    }
+
+    if (gtfsCache.isValid('nearbyRoutes', currentEtag)) {
+      const cachedData = gtfsCache.get('nearbyRoutes')
+      return res.status(200).json(cachedData?.data || [])
+    }
+
+    const db = await open({
+      filename: 'data/gtfs.sqlite',
+      driver: sqlite3.Database,
+      readonly: true,
+    })
+
+    // Query all stops
+    const stops = await db.all('SELECT stop_id, stop_lat, stop_lon FROM stops')
+
+    // Find stops within 500 meters
     const nearbyStops = stops.filter((stop: any) => {
       const stopLat = parseFloat(stop.stop_lat)
       const stopLng = parseFloat(stop.stop_lon)
@@ -72,22 +65,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return getDistance(userLat, userLng, stopLat, stopLng) <= 500
     }).map((stop: any) => stop.stop_id)
 
-    // 找到这些stop_id涉及到的trip_id
-    const nearbyTripIds = new Set(
-      stopTimes.filter((st: any) => nearbyStops.includes(st.stop_id)).map((st: any) => st.trip_id)
+    if (nearbyStops.length === 0) {
+      gtfsCache.set('nearbyRoutes', [], currentEtag)
+      return res.status(200).json([])
+    }
+
+    // Query stop_times for nearby stops
+    const stopTimes = await db.all(
+      `SELECT trip_id FROM stop_times WHERE stop_id IN (${nearbyStops.map(() => '?').join(',')})`,
+      ...nearbyStops
     )
-    // 找到这些trip_id涉及到的route_id
-    const nearbyRouteIds = new Set(
-      trips.filter((trip: any) => nearbyTripIds.has(trip.trip_id)).map((trip: any) => trip.route_id)
+
+    const nearbyTripIds = new Set(stopTimes.map((st: any) => st.trip_id))
+
+    if (nearbyTripIds.size === 0) {
+      gtfsCache.set('nearbyRoutes', [], currentEtag)
+      return res.status(200).json([])
+    }
+
+    // Query trips for nearby trip_ids
+    const trips = await db.all(
+      `SELECT trip_id, route_id FROM trips WHERE trip_id IN (${Array.from(nearbyTripIds).map(() => '?').join(',')})`,
+      ...Array.from(nearbyTripIds)
     )
-    // 只返回附近的线路，限制10个
-    const result = routes.filter((r: any) => nearbyRouteIds.has(r.route_id)).slice(0, 10).map((r: any) => ({
-      route_id: r.route_id,
-      route_short_name: r.route_short_name,
-      route_long_name: r.route_long_name,
-      route_type: r.route_type,
-    }))
-    res.status(200).json(result)
+
+    const nearbyRouteIds = new Set(trips.map((trip: any) => trip.route_id))
+
+    if (nearbyRouteIds.size === 0) {
+      gtfsCache.set('nearbyRoutes', [], currentEtag)
+      return res.status(200).json([])
+    }
+
+    // Query routes for nearby route_ids, limit 10
+    const routes = await db.all(
+      `SELECT route_id, route_short_name, route_long_name, route_type FROM routes WHERE route_id IN (${Array.from(nearbyRouteIds).map(() => '?').join(',')}) LIMIT 10`,
+      ...Array.from(nearbyRouteIds)
+    )
+
+    gtfsCache.set('nearbyRoutes', routes, currentEtag)
+
+    res.status(200).json(routes)
   } catch (e: any) {
     res.status(500).json({ error: e.message })
   }
