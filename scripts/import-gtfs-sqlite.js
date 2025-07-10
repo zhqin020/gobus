@@ -1,5 +1,3 @@
-// 使用 sqlite3（异步）和 csv-parse 导入 GTFS txt 到 SQLite
-// 依赖: npm install sqlite3 csv-parse
 const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
@@ -7,6 +5,7 @@ const parse = require('csv-parse/sync').parse;
 
 const GTFS_DIR = path.join(__dirname, '../data/google_transit');
 const DB_PATH = path.join(__dirname, '../data/gtfs.sqlite');
+const LOCK_FILE = path.join(__dirname, '../data/import.lock');
 
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err.stack || err, '\nModule:', __filename);
@@ -75,6 +74,17 @@ function insertRows(db, table, rows) {
 }
 
 async function importAll() {
+  if (fs.existsSync(LOCK_FILE)) {
+    console.log('[GTFS Import] Import already in progress. Exiting.');
+    return;
+  }
+  try {
+    fs.writeFileSync(LOCK_FILE, 'lock', { flag: 'wx' });
+  } catch (err) {
+    console.log('[GTFS Import] Could not create lock file, another import may be running. Exiting.');
+    return;
+  }
+
   console.log('[GTFS Import] Starting import process');
   try {
     if (fs.existsSync(DB_PATH)) {
@@ -117,9 +127,19 @@ async function importAll() {
       } else {
         console.log('[GTFS Import] Successfully imported all GTFS tables to gtfs.sqlite');
       }
+      try {
+        fs.unlinkSync(LOCK_FILE);
+      } catch (e) {
+        console.warn('[GTFS Import] Failed to remove lock file:', e);
+      }
     });
   } catch (err) {
     console.error('[GTFS Import] Critical error during import:', err);
+    try {
+      fs.unlinkSync(LOCK_FILE);
+    } catch (e) {
+      console.warn('[GTFS Import] Failed to remove lock file:', e);
+    }
     process.exit(1);
   }
 }

@@ -27,6 +27,8 @@ async function ensureDatabaseInitialized(): Promise<void> {
   const gtfsDir = path.join(process.cwd(), 'data/google_transit');
   const gtfsFilesExist = fs.existsSync(gtfsDir) && fs.readdirSync(gtfsDir).some(f => f.endsWith('.txt'));
   const dbExists = fs.existsSync(dbPath);
+  const lockFilePath = path.join(process.cwd(), 'data/import.lock');
+  const lockExists = fs.existsSync(lockFilePath);
 
   if (!gtfsFilesExist) {
     console.log('[DB Init] GTFS data files not found, running download script...');
@@ -50,24 +52,28 @@ async function ensureDatabaseInitialized(): Promise<void> {
   }
 
   if (!dbExists || !gtfsFilesExist) {
-    console.log('[DB Init] Running import script...');
-    await new Promise<void>((resolve, reject) => {
-      exec('node scripts/import-gtfs-sqlite.js', (error, stdout, stderr) => {
-        if (error) {
-          console.error(`[DB Init] Import script error: ${error.message}`);
-          reject(error);
-          return;
-        }
-        if (stderr) {
-          console.error(`[DB Init] Import script stderr: ${stderr}`);
-        }
-        console.log(`[DB Init] Import script output:\n${stdout}`);
-        resolve();
+    if (lockExists) {
+      console.log('[DB Init] Import lock file exists, skipping import to avoid duplicate runs.');
+    } else {
+      console.log('[DB Init] Running import script...');
+      await new Promise<void>((resolve, reject) => {
+        exec('node scripts/import-gtfs-sqlite.js', (error, stdout, stderr) => {
+          if (error) {
+            console.error(`[DB Init] Import script error: ${error.message}`);
+            reject(error);
+            return;
+          }
+          if (stderr) {
+            console.error(`[DB Init] Import script stderr: ${stderr}`);
+          }
+          console.log(`[DB Init] Import script output:\n${stdout}`);
+          resolve();
+        });
+      }).catch((err) => {
+        console.error('[DB Init] Import script promise rejected:', err);
+        throw err;
       });
-    }).catch((err) => {
-      console.error('[DB Init] Import script promise rejected:', err);
-      throw err;
-    });
+    }
   } else {
     console.log('[DB Init] SQLite database exists and GTFS data files present.');
   }
