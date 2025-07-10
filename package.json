@@ -43,7 +43,6 @@
     "@react-google-maps/api": "^2.20.7",
     "adm-zip": "^0.5.16",
     "autoprefixer": "^10.4.20",
-    "better-sqlite3": "^9.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
@@ -69,6 +68,7 @@
     "sonner": "^1.7.1",
     "sql.js": "1.10.3",
     "tailwind-merge": "^2.5.5",
+    "sqlite3": "^5.1.7",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.6",
     "zod": "^3.24.1"
@@ -81,8 +81,8 @@
     "@types/sqlite3": "^5.1.0",
     "postcss": "^8.5",
     "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
   }
 }
+ 

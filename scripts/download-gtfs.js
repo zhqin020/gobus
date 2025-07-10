@@ -4,6 +4,7 @@ const fs = require('fs');
 const https = require('https');
 const path = require('path');
 const AdmZip = require('adm-zip');
+const { exec } = require('child_process');
 
 const destZipPath = path.join(__dirname, '../data/google_transit.zip');
 const destUnzipDir = path.join(__dirname, '../data/google_transit/');
@@ -37,7 +38,10 @@ function downloadGTFS() {
       }
     }
 
-    if (localVersion.etag === remoteEtag && remoteEtag !== '') {
+    const gtfsDir = path.join(__dirname, '../data/google_transit');
+    const gtfsFilesExist = fs.existsSync(gtfsDir) && fs.readdirSync(gtfsDir).some(f => f.endsWith('.txt'));
+
+    if (localVersion.etag === remoteEtag && remoteEtag !== '' && gtfsFilesExist) {
       console.log('GTFS data is up to date, no download needed.');
       return;
     }
@@ -64,6 +68,18 @@ function downloadGTFS() {
           const zip = new AdmZip(destZipPath);
           zip.extractAllTo(destUnzipDir, true);
           console.log('GTFS unzipped to', destUnzipDir);
+          // Run import script after unzip
+          exec('node scripts/import-gtfs-sqlite.js', (error, stdout, stderr) => {
+            if (error) {
+              console.error(`Import script error: ${error.message}`);
+              return;
+            }
+            if (stderr) {
+              console.error(`Import script stderr: ${stderr}`);
+              return;
+            }
+            console.log(`Import script output:\n${stdout}`);
+          });
         } catch (e) {
           console.error('Unzip error:', e);
         }

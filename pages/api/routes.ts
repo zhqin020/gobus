@@ -4,6 +4,7 @@ import { open } from 'sqlite'
 import fs from 'fs'
 import path from 'path'
 import { gtfsCache } from '../../lib/cache'
+import { exec } from 'child_process'
 
 // Haversine formula to calculate distance between two lat/lng points (in meters)
 function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -20,6 +21,57 @@ function getDistance(lat1: number, lng1: number, lat2: number, lng2: number) {
 }
 
 const versionFilePath = path.join(process.cwd(), 'data/gtfs_version.json')
+const dbPath = path.join(process.cwd(), 'data/gtfs.sqlite')
+
+async function ensureDatabaseInitialized(): Promise<void> {
+  const gtfsDir = path.join(process.cwd(), 'data/google_transit');
+  const gtfsFilesExist = fs.existsSync(gtfsDir) && fs.readdirSync(gtfsDir).some(f => f.endsWith('.txt'));
+  const dbExists = fs.existsSync(dbPath);
+
+  if (!gtfsFilesExist) {
+    console.log('[DB Init] GTFS data files not found, running download script...');
+    await new Promise<void>((resolve, reject) => {
+      exec('node scripts/download-gtfs.js', (error, stdout, stderr) => {
+        if (error) {
+          console.error(`[DB Init] Download script error: ${error.message}`);
+          reject(error);
+          return;
+        }
+        if (stderr) {
+          console.error(`[DB Init] Download script stderr: ${stderr}`);
+        }
+        console.log(`[DB Init] Download script output:\n${stdout}`);
+        resolve();
+      });
+    }).catch((err) => {
+      console.error('[DB Init] Download script promise rejected:', err);
+      throw err;
+    });
+  }
+
+  if (!dbExists || !gtfsFilesExist) {
+    console.log('[DB Init] Running import script...');
+    await new Promise<void>((resolve, reject) => {
+      exec('node scripts/import-gtfs-sqlite.js', (error, stdout, stderr) => {
+        if (error) {
+          console.error(`[DB Init] Import script error: ${error.message}`);
+          reject(error);
+          return;
+        }
+        if (stderr) {
+          console.error(`[DB Init] Import script stderr: ${stderr}`);
+        }
+        console.log(`[DB Init] Import script output:\n${stdout}`);
+        resolve();
+      });
+    }).catch((err) => {
+      console.error('[DB Init] Import script promise rejected:', err);
+      throw err;
+    });
+  } else {
+    console.log('[DB Init] SQLite database exists and GTFS data files present.');
+  }
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -32,6 +84,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (isNaN(userLat) || isNaN(userLng)) {
       return res.status(400).json({ error: 'Invalid lat/lng' })
     }
+
+    await ensureDatabaseInitialized();
 
     let currentEtag = ''
     if (fs.existsSync(versionFilePath)) {
@@ -49,13 +103,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const db = await open({
-      filename: 'data/gtfs.sqlite',
-      driver: sqlite3.Database,
-      readonly: true,
+      filename: dbPath,
+      driver: sqlite3.Database
     })
 
     // Query all stops
-    const stops = await db.all('SELECT stop_id, stop_lat, stop_lon FROM stops')
+    let stops;
+    try {
+      stops = await db.all('SELECT stop_id, stop_lat, stop_lon FROM stops')
+    } catch (err) {
+      console.error('[API] Error querying stops:', err)
+      return res.status(500).json({ error: 'Error querying stops' })
+    }
 
     // Find stops within 500 meters
     const nearbyStops = stops.filter((stop: any) => {
@@ -66,43 +125,58 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }).map((stop: any) => stop.stop_id)
 
     if (nearbyStops.length === 0) {
-      gtfsCache.set('nearbyRoutes', [], currentEtag)
+      gtfsCache.set('nearbyRoutes', [], currentEtag, 24 * 60 * 60 * 1000) // 1 day expiration
       return res.status(200).json([])
     }
 
-    // Query stop_times for nearby stops
-    const stopTimes = await db.all(
-      `SELECT trip_id FROM stop_times WHERE stop_id IN (${nearbyStops.map(() => '?').join(',')})`,
-      ...nearbyStops
-    )
+    let stopTimes;
+    try {
+      stopTimes = await db.all(
+        `SELECT trip_id FROM stop_times WHERE stop_id IN (${nearbyStops.map(() => '?').join(',')})`,
+        ...nearbyStops
+      )
+    } catch (err) {
+      console.error('[API] Error querying stop_times:', err)
+      return res.status(500).json({ error: 'Error querying stop_times' })
+    }
 
     const nearbyTripIds = new Set(stopTimes.map((st: any) => st.trip_id))
 
     if (nearbyTripIds.size === 0) {
-      gtfsCache.set('nearbyRoutes', [], currentEtag)
+      gtfsCache.set('nearbyRoutes', [], currentEtag, 24 * 60 * 60 * 1000) // 1 day expiration
       return res.status(200).json([])
     }
 
-    // Query trips for nearby trip_ids
-    const trips = await db.all(
-      `SELECT trip_id, route_id FROM trips WHERE trip_id IN (${Array.from(nearbyTripIds).map(() => '?').join(',')})`,
-      ...Array.from(nearbyTripIds)
-    )
+    let trips;
+    try {
+      trips = await db.all(
+        `SELECT trip_id, route_id FROM trips WHERE trip_id IN (${Array.from(nearbyTripIds).map(() => '?').join(',')})`,
+        ...Array.from(nearbyTripIds)
+      )
+    } catch (err) {
+      console.error('[API] Error querying trips:', err)
+      return res.status(500).json({ error: 'Error querying trips' })
+    }
 
     const nearbyRouteIds = new Set(trips.map((trip: any) => trip.route_id))
 
     if (nearbyRouteIds.size === 0) {
-      gtfsCache.set('nearbyRoutes', [], currentEtag)
+      gtfsCache.set('nearbyRoutes', [], currentEtag, 24 * 60 * 60 * 1000) // 1 day expiration
       return res.status(200).json([])
     }
 
-    // Query routes for nearby route_ids, limit 10
-    const routes = await db.all(
-      `SELECT route_id, route_short_name, route_long_name, route_type FROM routes WHERE route_id IN (${Array.from(nearbyRouteIds).map(() => '?').join(',')}) LIMIT 10`,
-      ...Array.from(nearbyRouteIds)
-    )
+    let routes;
+    try {
+      routes = await db.all(
+        `SELECT route_id, route_short_name, route_long_name, route_type FROM routes WHERE route_id IN (${Array.from(nearbyRouteIds).map(() => '?').join(',')}) LIMIT 10`,
+        ...Array.from(nearbyRouteIds)
+      )
+    } catch (err) {
+      console.error('[API] Error querying routes:', err)
+      return res.status(500).json({ error: 'Error querying routes' })
+    }
 
-    gtfsCache.set('nearbyRoutes', routes, currentEtag)
+    gtfsCache.set('nearbyRoutes', routes, currentEtag, 24 * 60 * 60 * 1000) // 1 day expiration
 
     res.status(200).json(routes)
   } catch (e: any) {
