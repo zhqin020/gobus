@@ -16,16 +16,23 @@ stopsview keep showing '加载线路数据中'，  no data shown  ，已解决
 
 说明：
 
-1. 背景是当前的地图，上面有当前公交线路
+1. 背景是当前的地图，上面有当前公交线路 fixed
 
-2. 地图上面一层有一个可以从底部拖动的panel，显示当前公交线路的信息，也可以拖动到底部，显示完整的地图，这个panel 顶部是拖动的header,  
+2. 地图上面一层有一个可以从底部拖动的panel，显示当前公交线路的信息，也可以拖动到底部，显示完整的地图，这个panel 顶部是拖动的header,  fixed
 
-3. 下面是两个按钮，分别显示公交的两个方向的终点，点击按钮后可以切换，显示另一个方向的站点。 
+3. 下面是显示线路方向的按钮，分别显示公交的不同方向的终点，点击按钮后可以切换，显示另一个方向的站点。 fixed
 
-4. 下面是当前方向的终点站和当前位置到终点的车站数量。
+4. 下面是当前方向的终点站和当前位置到终点的车站数量。 fixed
 
 5. 下面是车站的列表，和预计到达时间，如果站点有其他的换乘车次，则显示这些车次
+    --如果有换乘的route, 则在车站名称下面列出各个route的编号， route_type=1 subway,  route_type=3 bus,  不同的类型显示不同的图标， 先显示subway, 然后列出bus numbers
 
-6. 可以滚动显示车站的列表，直到底部
+6. 在车站的右边，显示车辆到达本站的相对时间，+ 1min, 下一个 的时间为 +5min ...
+ 相对时间从 stop_times 表中获取，diff = stop_times.arrival_time - stop_times.departure_time (of start station)
 
-站点显示的panel，应该可以从底部拖动，按住上面的header,可以向下拖动，直到
+请参照 docs\refer\get-route-stops-v2.tsx 对 stopsview 进行修改
+主要有以下内容：
+1. 修改站点列表的显示，目前的连接线是断开的
+2. 在站点下方显示换乘线路编号，优先显示地铁，然后是BUS，区分方法：routes.route_type=1 (subway), 3 (bus)
+3. 显示风格和图标按照 get-route-stops-v2.tsx
+4. 换乘线路的查询方法，参照 docs\refer\get-route-stops-v2.tsx 中的 function getTransferBusLinesForArea 

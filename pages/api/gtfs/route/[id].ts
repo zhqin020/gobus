@@ -56,7 +56,14 @@ export default async function handler(
     const stopsByDirection = []
     for (const dir of directions) {
       const stopsQuery = db.prepare(`
-        SELECT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon, st.stop_sequence
+        SELECT 
+          s.stop_id, 
+          s.stop_name, 
+          s.stop_lat, 
+          s.stop_lon, 
+          st.stop_sequence,
+          st.arrival_time,
+          st.departure_time
         FROM stops s
         JOIN stop_times st ON s.stop_id = st.stop_id
         JOIN trips t ON st.trip_id = t.trip_id
@@ -67,7 +74,16 @@ export default async function handler(
       stopsQuery.bind({ ':id': id, ':direction': dir.direction_id })
       const stops = []
       while (stopsQuery.step()) {
-        stops.push(stopsQuery.getAsObject())
+        const stop = stopsQuery.getAsObject()
+        stops.push({
+          stop_id: stop.stop_id,
+          stop_name: stop.stop_name,
+          stop_lat: stop.stop_lat,
+          stop_lon: stop.stop_lon,
+          stop_sequence: stop.stop_sequence,
+          arrival_time: stop.arrival_time,
+          departure_time: stop.departure_time
+        })
       }
       stopsQuery.free()
 
@@ -76,6 +92,7 @@ export default async function handler(
         trip_headsign: dir.trip_headsign,
         stops
       })
+      console.log(`Processed direction ${dir.direction_id} with ${stops.length} stops`)
     }
 
     db.close()

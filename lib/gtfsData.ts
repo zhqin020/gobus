@@ -99,3 +99,74 @@ export function getRouteShape(route_id: string) {
   shapes.sort((a: any, b: any) => Number(a.shape_pt_sequence) - Number(b.shape_pt_sequence));
   return Array.isArray(shapes) ? shapes.map((s: any) => ({ lat: Number(s.shape_pt_lat), lng: Number(s.shape_pt_lon) })) : [];
 }
+
+// 获取站点的换乘信息
+export function getTransfersForStop(stop_id: string) {
+  if (!gtfsData) throw new Error('GTFS data not loaded');
+  const stopIdStr = String(stop_id);
+  
+  // 获取所有以该站点为起点的换乘
+  const transfers = Array.isArray(gtfsData['transfers']) 
+    ? gtfsData['transfers'].filter((t: any) => String(t.from_stop_id) === stopIdStr)
+    : [];
+  
+  // 获取换乘目标站点的信息
+  return transfers.map((transfer: any) => {
+    const toStop = Array.isArray(gtfsData['stops']) 
+      ? gtfsData['stops'].find((s: any) => s.stop_id === transfer.to_stop_id)
+      : null;
+    
+    return {
+      from_stop_id: transfer.from_stop_id,
+      to_stop_id: transfer.to_stop_id,
+      to_stop_name: toStop?.stop_name || '',
+      transfer_type: transfer.transfer_type,
+      min_transfer_time: transfer.min_transfer_time
+    };
+  });
+}
+
+// 获取站点的到达时间信息
+export function getStopTimes(stop_id: string) {
+  if (!gtfsData) throw new Error('GTFS data not loaded');
+  const stopIdStr = String(stop_id);
+  
+  // 获取该站点的所有到达时间记录
+  const stopTimes = Array.isArray(gtfsData['stop_times']) 
+    ? gtfsData['stop_times'].filter((st: any) => st.stop_id === stopIdStr)
+    : [];
+  
+  // 关联行程和路线信息
+  return stopTimes.map((stopTime: any) => {
+    const trip = Array.isArray(gtfsData['trips']) 
+      ? gtfsData['trips'].find((t: any) => t.trip_id === stopTime.trip_id)
+      : null;
+    
+    const route = trip && Array.isArray(gtfsData['routes']) 
+      ? gtfsData['routes'].find((r: any) => r.route_id === trip.route_id)
+      : null;
+    
+    return {
+      arrival_time: stopTime.arrival_time,
+      departure_time: stopTime.departure_time,
+      route_id: trip?.route_id,
+      route_short_name: route?.route_short_name,
+      trip_headsign: trip?.trip_headsign
+    };
+  });
+}
+
+// 计算当前时间到到达时间的分钟数
+export function getTimeToArrival(arrival_time: string) {
+  if (!arrival_time) return null;
+  
+  // 解析到达时间 (格式: HH:MM:SS)
+  const [hours, minutes] = arrival_time.split(':').map(Number);
+  const arrivalDate = new Date();
+  arrivalDate.setHours(hours, minutes, 0, 0);
+  
+  // 计算与当前时间的差值(分钟)
+  const now = new Date();
+  const diffMs = arrivalDate.getTime() - now.getTime();
+  return Math.round(diffMs / (1000 * 60));
+}

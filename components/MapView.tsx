@@ -37,7 +37,18 @@ const MapView = forwardRef<
   {
     userLocation: { lat: number; lng: number },
     routePolyline?: Array<{ lat: number; lng: number }>, // 新增 prop: routePolyline
-    stops?: Array<{ lat: number; lng: number; name: string; transferRoutes?: string[] }>, // 新增 prop: stops
+    stops?: Array<{ 
+      lat: number; 
+      lng: number; 
+      name: string; 
+      stop_id?: string;
+      transferRoutes?: string[];
+      stopTimes?: Array<{
+        arrival_time: string;
+        route_short_name?: string;
+        trip_headsign?: string;
+      }>;
+    }>, // 新增 prop: stops
     reverseDirection?: boolean // 新增 prop: reverseDirection
   }
 >(function MapView(
@@ -83,19 +94,17 @@ const MapView = forwardRef<
   // 处理方向反转
   const sortedStops = useMemo(() => {
     if (!stops) return [];
-    const sorted = [...stops].sort((a, b) => (a.stop_sequence ?? 0) - (b.stop_sequence ?? 0));
+    // The stops are already sorted when passed as props.
+    // We just need to handle the reverse direction toggle.
+    const sorted = [...stops];
     return reverseDirection ? sorted.reverse() : sorted;
   }, [stops, reverseDirection]);
 
-  // Convert stops to { lat, lng, name, transferRoutes? } format and filter invalid ones
-  const validStops = sortedStops
-    .filter(stop => stop && typeof stop.stop_lat === "number" && typeof stop.stop_lon === "number")
-    .map(stop => ({
-      lat: stop.stop_lat,
-      lng: stop.stop_lon,
-      name: stop.stop_name,
-      transferRoutes: stop.transferRoutes || [],
-    }));
+  // Filter out any invalid stops
+  const validStops = useMemo(() => sortedStops
+    .filter(stop => stop && typeof stop.lat === 'number' && typeof stop.lng === 'number'), 
+    [sortedStops]);
+
 
   return (
     <MapContainer
@@ -113,10 +122,13 @@ const MapView = forwardRef<
           <Popup>你在这里</Popup>
         </Marker>
       )}
-      {/* 绘制线路 polyline，颜色改为浅蓝色，宽度等于小圆圈半径 */}
-      {validStops.length > 0 && (
+      {/* 绘制线路 polyline，优先使用 routePolyline */}
+      {routePolyline && routePolyline.length > 0 ? (
+        <Polyline positions={routePolyline.map(p => [p.lat, p.lng])} pathOptions={{ color: "#3498db", weight: 5 }} />
+      ) : validStops.length > 0 ? (
         <Polyline positions={validStops.map(p => [p.lat, p.lng])} pathOptions={{ color: "#7ec8e3", weight: 7 }} />
-      )}
+      ) : null}
+
       {/* 绘制所有站点，首末站特殊处理 */}
       {validStops && Array.isArray(validStops) && validStops.map((stop, idx) => {
         // 起点
@@ -132,8 +144,34 @@ const MapView = forwardRef<
                 <div>
                   <div>{stop.name}（起点）</div>
                   {stop.transferRoutes && Array.isArray(stop.transferRoutes) && stop.transferRoutes.length > 0 && (
-                    <div style={{ fontSize: '0.9em', color: '#888' }}>
+                    <div style={{ fontSize: '0.9em', color: '#888', marginBottom: '8px' }}>
                       换乘: {stop.transferRoutes.join(', ')}
+                    </div>
+                  )}
+                  {stop.stopTimes && Array.isArray(stop.stopTimes) && stop.stopTimes.length > 0 && (
+                    <div style={{ fontSize: '0.9em' }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>到达时间:</div>
+                      {stop.stopTimes.map((time: { arrival_time: string, route_short_name?: string, trip_headsign?: string }, i: number) => {
+                        const minsToArrival = time.arrival_time ? 
+                          Math.round((new Date(`1970-01-01T${time.arrival_time}Z`).getTime() - new Date().getTime()) / (1000 * 60)) : null;
+                        return (
+
+                          <div key={i} style={{ marginBottom: '4px' }}>
+                            {time.route_short_name && <span>{time.route_short_name}路 </span>}
+                            {time.trip_headsign && <span>往{time.trip_headsign} </span>}
+                            {time.arrival_time && (
+                              <span>
+                                {time.arrival_time.substring(0, 5)}
+                                {minsToArrival !== null && minsToArrival > 0 && (
+                                  <span style={{ color: minsToArrival <= 5 ? '#f5222d' : '#52c41a' }}>
+                                    (约{minsToArrival}分钟)
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
