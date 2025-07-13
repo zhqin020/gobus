@@ -10,7 +10,9 @@ import {
   AlertTriangle,
   Home,
   Settings,
+  Heart,
   MoreHorizontal,
+
   ArrowRight,
   Bus,
   Train,
@@ -34,7 +36,10 @@ const MapView = dynamic(() => import("@/components/MapView"), { ssr: false })
 export default function TransitApp() {
   const t = useTranslations()
   const router = useRouter()
-  const [currentView, setCurrentView] = useState<"home" | "search" | "route" | "stops" | "arrivals" | "subway" | "settings">("home")
+  const [activeTab, setActiveTab] = useState("home")
+  const [showToilets, setShowToilets] = useState(false)
+  const [isStopsViewOpen, setIsStopsViewOpen] = useState(false)
+
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedRoute, setSelectedRoute] = useState<any>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
@@ -170,20 +175,12 @@ export default function TransitApp() {
     setAddressSearchResults([]);
   };
 
-  const handleSearch = (query: string) => {
-    setSearchQuery(query)
-    if (query.toLowerCase().includes("119")) {
-      setCurrentView("search")
-    } else if (query.toLowerCase().includes("expo")) {
-      setCurrentView("subway")
-    }
-  }
-
   const handleRouteSelect = (route: any) => {
     console.log('[handleRouteSelect] selected route:', route);
     setSelectedRoute(route)
-    setCurrentView("stops")
+    setIsStopsViewOpen(true)
   }
+
 
   const languageLabelMap = {
     en: "En",
@@ -196,34 +193,9 @@ export default function TransitApp() {
     router.push(`/${lang}`)
   }
 
-  const renderHomeView = () => (
-    <div className="min-h-screen bg-[#181B1F] text-white">
-      <div className="relative h-80 bg-[#181B1F] overflow-hidden"> 
- 
-        {userLocation ? (
-          <MapView ref={mapRef} userLocation={userLocation} />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">{t('loadingMap')}</div>
-        )}
-        <div className="absolute top-4 right-4 flex flex-col gap-2 z-10 pointer-events-auto">
-          <button
-            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-[#3DDC97] focus:outline-none"
-            onClick={handleRecenter}
-            aria-label="回到当前位置"
-          >
-            <MapPin className="w-6 h-6 text-[#3DDC97]" />
-          </button>
-          <button
-            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-transparent hover:border-[#3DDC97] focus:outline-none"
-            onClick={() => setCurrentView("settings")}
-            aria-label="设置"
-          >
-            <Settings className="w-6 h-6 text-gray-400 hover:text-[#3DDC97]" />
-          </button>
-        </div>
-      </div>
-
-      <div className="px-4 -mt-8 z-20 relative">
+  const renderHomeSheet = () => (
+    <div className="absolute bottom-0 left-0 right-0 z-20 p-4 bg-[#181B1F] rounded-t-2xl shadow-lg max-h-[45vh] overflow-y-auto">
+      <div className="mb-4">
         <div className="rounded-2xl bg-[#1E2228] shadow-lg flex items-center px-4 py-3 border border-[#23272F]">
           <Search className="w-6 h-6 text-[#3DDC97] mr-2" />
           <input
@@ -234,8 +206,7 @@ export default function TransitApp() {
           />
         </div>
       </div>
-
-      <div className="p-4 space-y-4">
+      <div className="space-y-4">
         {routesError && (
           <div className="text-red-400 p-2">{routesError}</div>
         )}
@@ -277,7 +248,7 @@ export default function TransitApp() {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-white text-xl font-semibold">{t('settings')}</h2>
           <button
-            onClick={() => setCurrentView("home")}
+            onClick={() => setActiveTab("home")}
             aria-label="Close settings"
             className="p-2 rounded-full hover:bg-gray-700"
           >
@@ -470,67 +441,6 @@ export default function TransitApp() {
     </div>
   )
 
-  const renderSearchView = () => (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="bg-green-600 p-4">
-        <div className="flex items-center gap-3">
-          <Search className="w-5 h-5 text-white" />
-          <Input
-            placeholder="119"
-            className="bg-transparent border-none text-white placeholder-green-100 text-lg"
-            value="119"
-            readOnly
-          />
-          <Button variant="ghost" size="sm" className="text-white">
-            ✕
-          </Button>
-        </div>
-      </div>
-
-      <div className="bg-gray-800 p-4">
-        <div className="flex items-center gap-3">
-          <Bus className="w-8 h-8 text-blue-400" />
-          <div>
-            <div className="text-xl font-bold text-blue-400">119 • TransLink</div>
-            <div className="text-gray-400">Edmonds Station / Metrotown Station</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-4">
-        <h3 className="text-gray-400 text-sm font-medium mb-4">STOPS AND STATIONS</h3>
-        <div className="space-y-4">
-          {((routes ?? []).length > 0) && (routes ?? []).map((route) => (
-            <div key={route.route_id} className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-gray-700 rounded flex items-center justify-center">
-                <span className="text-white font-bold">T</span>
-              </div>
-              <div className="flex-1">
-                <div className="font-medium">{route.route_long_name}</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <Bus className="w-4 h-4 text-gray-400" />
-                  <div className="flex gap-2">
-                    {(typeof route.route_short_name === 'string' ? route.route_short_name.split(',') : []).map((r: string) => (
-                      // 修正：点击时传递 route 对象，而不是字符串
-                      <Badge key={r} variant="secondary" className="bg-blue-600 text-white cursor-pointer"
-                        onClick={() => {
-                          console.log('[SearchView] Badge onClick, route:', route);
-                          handleRouteSelect(route);
-                        }}>
-                        {r}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <MoreHorizontal className="w-5 h-5 text-gray-400" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-
   // 加载选中线路的 stops、polyline 和 directions
   useEffect(() => {
     // 仅在 selectedRoute 变化且有效时才进行数据获取
@@ -573,7 +483,7 @@ export default function TransitApp() {
           }
 
           // 更新selectedRoute包含可用数据
-          setSelectedRoute(prev => ({
+          setSelectedRoute((prev: any) => ({
             ...prev,
             stops: routeData.stops || prev.stops || [],
             polyline: routeData.polyline || prev.polyline || [],
@@ -596,108 +506,6 @@ export default function TransitApp() {
   const handleDirectionChange = (reverse: boolean) => {
     setReverseDirection(reverse)
   }
-
-  const renderArrivalsView = () => (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="relative h-64 bg-gray-800">
-        <div className="absolute top-4 left-4 text-4xl font-bold text-blue-400">119</div>
-        <div className="absolute bottom-4 left-4 right-4">
-          <div className="bg-yellow-600 p-3 rounded-lg">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5" />
-              <div>
-                <div className="font-medium">Modified service</div>
-                <div className="text-sm">Posted 2 days ago</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center gap-2">
-          <ArrowRight className="w-5 h-5 text-blue-400" />
-          <span className="font-medium text-lg">Edmonds Station</span>
-        </div>
-        <div className="text-gray-400 text-sm">Kingsway / McKay Ave Eastbound</div>
-      </div>
-
-      <div className="p-4">
-        <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <Clock className="w-6 h-6 text-blue-400" />
-            <div className="text-3xl font-bold text-blue-400">0 min</div>
-          </div>
-
-          <div className="text-2xl text-gray-300">27 min</div>
-
-          <div className="text-2xl text-gray-300">58 min</div>
-        </div>
-
-        <Button className="w-full mt-8 bg-blue-600 hover:bg-blue-700">
-          <Clock className="w-4 h-4 mr-2" />
-          MORE DEPARTURES
-          <ArrowRight className="w-4 h-4 ml-2" />
-        </Button>
-      </div>
-    </div>
-  )
-
-  const renderSubwayView = () => (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="relative h-64 bg-gray-800">
-        <div className="absolute bottom-4 left-4 right-4">
-          <div className="flex items-center gap-3 bg-blue-600 p-3 rounded-lg">
-            <Train className="w-8 h-8 text-white" />
-            <span className="text-lg font-medium">Expo Line</span>
-          </div>
-        </div>
-        <div className="absolute bottom-20 left-4 right-4">
-          <div className="bg-yellow-600 p-3 rounded-lg">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5" />
-              <div>
-                <div className="font-medium">Service alerts for some stops</div>
-                <div className="text-sm">Posted Jun 9</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center gap-2">
-          <ArrowRight className="w-5 h-5 text-blue-400" />
-          <span className="font-medium">Eastbound</span>
-        </div>
-        <div className="text-gray-400 text-sm">24 stops</div>
-      </div>
-
-      <div className="p-4">
-        <div className="space-y-4">
-          {((routes ?? []).length > 0) && (routes ?? []).map((route) => (
-            <div key={route.route_id} className="flex items-center gap-4">
-              <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
-              <div className="flex-1">
-                <div className="font-medium">{route.route_long_name}</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <Bus className="w-4 h-4 text-gray-400" />
-                  <div className="flex gap-1">
-                    {(typeof route.route_short_name === 'string' ? route.route_short_name.split(',') : []).map((r: string) => (
-                      <Badge key={r} variant="secondary" className="bg-blue-600 text-white text-xs">
-                        {r}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              {route.time && <div className="text-gray-400 text-sm">{route.time}</div>}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
 
   // 加载本地设置
   useEffect(() => {
@@ -733,10 +541,61 @@ export default function TransitApp() {
   }, [workAddress]);
 
   return (
-    <div className="max-w-md mx-auto bg-gray-900">
-      {currentView === "home" && renderHomeView()}
-      {currentView === "search" && renderSearchView()}
-      {currentView === "stops" && (
+    <div className="max-w-md mx-auto bg-gray-900 h-screen flex flex-col">
+      <div className="relative flex-1">
+        {userLocation ? (
+          <MapView
+            ref={mapRef}
+            userLocation={userLocation}
+            routePolyline={isStopsViewOpen ? routePolyline : []}
+            showToilets={showToilets}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-400">{t('loadingMap')}</div>
+        )}
+
+        <div className="absolute top-4 right-4 z-10 pointer-events-auto">
+          <button
+            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-[#3DDC97] focus:outline-none"
+            onClick={handleRecenter}
+            aria-label="回到当前位置"
+          >
+            <MapPin className="w-6 h-6 text-[#3DDC97]" />
+          </button>
+        </div>
+        
+        {activeTab === 'search' && (
+          <div className="absolute top-4 left-4 right-20 z-20">
+            <div className="rounded-2xl bg-[#1E2228] shadow-lg flex items-center px-4 py-3 border border-[#23272F]">
+              <Search className="w-6 h-6 text-[#3DDC97] mr-2" />
+              <input
+                className="flex-1 bg-transparent outline-none text-lg text-white placeholder-[#A0AEC0]"
+                placeholder={t('searchAddress')}
+                value={addressSearchInput}
+                onChange={handleAddressSearchInput}
+                autoFocus
+              />
+            </div>
+             {addressSearchResults.length > 0 && (
+                <div className="mt-2 max-h-60 overflow-auto bg-gray-800 rounded-md border border-gray-700">
+                  {Array.isArray(addressSearchResults) && addressSearchResults.map((addr) => (
+                    <div
+                      key={addr}
+                      className="p-2 cursor-pointer hover:bg-green-700 text-white"
+                      onClick={() => handleAddressSelect(addr)}
+                    >
+                      {addr}
+                    </div>
+                  ))}
+                </div>
+              )}
+          </div>
+        )}
+
+        {activeTab === 'home' && renderHomeSheet()}
+      </div>
+
+      {isStopsViewOpen && (
         <StopsView
           selectedRoute={selectedRoute}
           routePolyline={routePolyline}
@@ -744,59 +603,52 @@ export default function TransitApp() {
           loadingStops={loadingStops}
           onRecenter={handleRecenter}
           onDirectionChange={handleDirectionChange}
+          onBack={() => setIsStopsViewOpen(false)}
         />
       )}
-      {currentView === "arrivals" && renderArrivalsView()}
-      {currentView === "subway" && renderSubwayView()}
-      {currentView === "settings" && renderSettingsView()}
 
-      <div className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-gray-800 border-t border-gray-700">
-        <div className="flex justify-around p-4">
+      {activeTab === "settings" && renderSettingsView()}
+
+      <footer className="w-full max-w-md mx-auto bg-[#23272F] border-t border-gray-700">
+        <div className="flex justify-around p-2">
           <Button
             variant="ghost"
-            size="sm"
-            onClick={() => setCurrentView("home")}
-            className={currentView === "home" ? "text-blue-400" : "text-gray-400"}
+            size="icon"
+            onClick={() => setActiveTab("home")}
+            className={`rounded-full ${activeTab === "home" ? "text-[#3DDC97]" : "text-gray-400"}`}
           >
-            <Home className="w-5 h-5" />
+            <Home className="w-6 h-6" />
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            onClick={() => setCurrentView("search")}
-            className={currentView === "search" ? "text-blue-400" : "text-gray-400"}
+            size="icon"
+            onClick={() => setActiveTab("search")}
+            className={`rounded-full ${activeTab === "search" ? "text-[#3DDC97]" : "text-gray-400"}`}
           >
-            <Search className="w-5 h-5" />
+            <Search className="w-6 h-6" />
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            onClick={() => setCurrentView("stops")}
-            className={currentView === "stops" ? "text-blue-400" : "text-gray-400"}
+            size="icon"
+            onClick={() => setShowToilets(!showToilets)}
+            className={`rounded-full ${showToilets ? "text-[#3DDC97]" : "text-gray-400"}`}
           >
-            <Bus className="w-5 h-5" />
+            <Heart className="w-6 h-6" />
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            onClick={() => setCurrentView("arrivals")}
-            className={currentView === "arrivals" ? "text-blue-400" : "text-gray-400"}
+            size="icon"
+            onClick={() => setActiveTab("settings")}
+            className={`rounded-full ${activeTab === "settings" ? "text-[#3DDC97]" : "text-gray-400"}`}
           >
-            <Clock className="w-5 h-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setCurrentView("subway")}
-            className={currentView === "subway" ? "text-blue-400" : "text-gray-400"}
-          >
-            <Train className="w-5 h-5" />
+            <Settings className="w-6 h-6" />
           </Button>
         </div>
-      </div>
+      </footer>
     </div>
   )
 }
+
 
 // 在文件顶部（import 之后，export default function TransitApp 之前）
 let addressSearchRequestId = 0;

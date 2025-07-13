@@ -51,7 +51,9 @@ interface StopsViewProps {
   loadingStops: boolean
   onRecenter: () => void
   onDirectionChange: (reverse: boolean) => void
+  onBack?: () => void
 }
+
 
 // --- Helper Functions ---
 const calculateRelativeTime = (timeStr?: string, baseTimeStr?: string) => {
@@ -70,6 +72,7 @@ export default function StopsView({
   routePolyline,
   userLocation,
   loadingStops,
+  onBack,
 }: StopsViewProps) {
   const [currentDirectionIndex, setCurrentDirectionIndex] = useState(0)
   const [transferLines, setTransferLines] = useState<Record<string, TransferData>>({});
@@ -154,6 +157,12 @@ export default function StopsView({
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
         <div className="text-red-500">Error: Route or direction data is not available.</div>
+        <button
+          onClick={onBack}
+          className="mt-4 px-4 py-2 bg-gray-700 rounded text-white hover:bg-gray-600"
+        >
+          Back
+        </button>
       </div>
     )
   }

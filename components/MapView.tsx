@@ -3,7 +3,7 @@
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, CircleMarker } from "react-leaflet"
 import L, { DivIcon } from "leaflet"
 import "leaflet/dist/leaflet.css"
-import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from "react"
+import { useEffect, useRef, forwardRef, useImperativeHandle, useMemo, useState } from "react"
 import type { Map as LeafletMap } from 'leaflet';
 
 // Fix Leaflet's default icon URLs to avoid 404 errors with locale prefix
@@ -47,15 +47,17 @@ const MapView = forwardRef<
         arrival_time: string;
         route_short_name?: string;
         trip_headsign?: string;
-      }>;
+      }>; 
     }>, // 新增 prop: stops
-    reverseDirection?: boolean // 新增 prop: reverseDirection
+    reverseDirection?: boolean, // 新增 prop: reverseDirection
+    showToilets?: boolean // 新增 prop: showToilets
   }
 >(function MapView(
-  { userLocation, routePolyline, stops, reverseDirection },
+  { userLocation, routePolyline, stops, reverseDirection, showToilets },
   ref
 ) {
   const recenterRef = useRef<{ recenter: () => void }>(null);
+  const [toiletMarkers, setToiletMarkers] = useState<Array<{ lat: number; lng: number; name: string }>>([]);
 
   useImperativeHandle(ref, () => ({
     recenter: () => {
@@ -90,7 +92,6 @@ const MapView = forwardRef<
     });
   }, []);
 
-
   // 处理方向反转
   const sortedStops = useMemo(() => {
     if (!stops) return [];
@@ -105,6 +106,42 @@ const MapView = forwardRef<
     .filter(stop => stop && typeof stop.lat === 'number' && typeof stop.lng === 'number'), 
     [sortedStops]);
 
+  // Fetch nearby toilets when showToilets is true
+  useEffect(() => {
+    if (!showToilets || !userLocation) {
+      setToiletMarkers([]);
+      return;
+    }
+    const fetchToilets = async () => {
+      try {
+        const params = new URLSearchParams({
+          q: 'toilet',
+          format: 'json',
+          limit: '20',
+          lat: userLocation.lat.toString(),
+          lon: userLocation.lng.toString(),
+          radius: '1000',
+        });
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+          headers: {
+            'Accept-Language': 'en',
+          }
+        });
+        if (!response.ok) throw new Error('Failed to fetch toilets');
+        const data = await response.json();
+        const toilets = data.map((item: any) => ({
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon),
+          name: item.display_name,
+        }));
+        setToiletMarkers(toilets);
+      } catch (error) {
+        console.error('Error fetching toilets:', error);
+        setToiletMarkers([]);
+      }
+    };
+    fetchToilets();
+  }, [showToilets, userLocation]);
 
   return (
     <MapContainer
@@ -221,6 +258,12 @@ const MapView = forwardRef<
           </CircleMarker>
         );
       })}
+      {/* Render toilet markers */}
+      {showToilets && toiletMarkers.map((toilet: { lat: number; lng: number; name: string }, idx: number) => (
+        <Marker key={`toilet-${idx}`} position={{ lat: toilet.lat, lng: toilet.lng }}>
+          <Popup>{toilet.name}</Popup>
+        </Marker>
+      ))}
       <RecenterControl ref={recenterRef} center={userLocation} />
     </MapContainer>
   )
