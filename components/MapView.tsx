@@ -32,8 +32,23 @@ const RecenterControl = forwardRef<{ recenter: () => void }, { center: { lat: nu
   return null;
 });
 
+interface Restroom {
+  id: string;
+  lat: number;
+  lon: number;
+  name: string;
+}
+
+const MapAccessor = ({ onMap }: { onMap: (map: LeafletMap) => void }) => {
+  const map = useMap();
+  useEffect(() => {
+    onMap(map);
+  }, [map, onMap]);
+  return null;
+};
+
 const MapView = forwardRef<
-  { recenter: () => void } | undefined,
+  { recenter: () => void; centerOnRestroom: (coords: { lat: number, lon: number }) => void; } | undefined,
   {
     userLocation: { lat: number; lng: number },
     routePolyline?: Array<{ lat: number; lng: number }>, // 新增 prop: routePolyline
@@ -50,21 +65,28 @@ const MapView = forwardRef<
       }>; 
     }>, // 新增 prop: stops
     reverseDirection?: boolean, // 新增 prop: reverseDirection
-    showToilets?: boolean // 新增 prop: showToilets
+    restrooms?: Restroom[],
+    selectedRestroomId?: string | null
   }
 >(function MapView(
-  { userLocation, routePolyline, stops, reverseDirection, showToilets },
+  { userLocation, routePolyline, stops, reverseDirection, restrooms, selectedRestroomId },
   ref
 ) {
   const recenterRef = useRef<{ recenter: () => void }>(null);
-  const [toiletMarkers, setToiletMarkers] = useState<Array<{ lat: number; lng: number; name: string }>>([]);
+  const [map, setMap] = useState<LeafletMap | null>(null);
 
   useImperativeHandle(ref, () => ({
     recenter: () => {
       console.log('[MapView] recenter called');
       recenterRef.current?.recenter();
+    },
+    centerOnRestroom: (coords: { lat: number, lon: number }) => {
+      if (map) {
+        map.flyTo([coords.lat, coords.lon], 16);
+      }
     }
   }));
+
 
   // 只在客户端创建 DefaultIcon，并传递给 Marker
   const markerIcon = useMemo(() => {
@@ -92,6 +114,19 @@ const MapView = forwardRef<
     });
   }, []);
 
+  const restroomIcon = useMemo(() => L.icon({
+    iconUrl: '/images/restroom-icon.png',
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+  }), []);
+
+  const selectedRestroomIcon = useMemo(() => L.icon({
+    iconUrl: '/images/restroom-icon-selected.png',
+    iconSize: [40, 40],
+    iconAnchor: [20, 40],
+  }), []);
+
+
   // 处理方向反转
   const sortedStops = useMemo(() => {
     if (!stops) return [];
@@ -106,42 +141,7 @@ const MapView = forwardRef<
     .filter(stop => stop && typeof stop.lat === 'number' && typeof stop.lng === 'number'), 
     [sortedStops]);
 
-  // Fetch nearby toilets when showToilets is true
-  useEffect(() => {
-    if (!showToilets || !userLocation) {
-      setToiletMarkers([]);
-      return;
-    }
-    const fetchToilets = async () => {
-      try {
-        const params = new URLSearchParams({
-          q: 'toilet',
-          format: 'json',
-          limit: '20',
-          lat: userLocation.lat.toString(),
-          lon: userLocation.lng.toString(),
-          radius: '1000',
-        });
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
-          headers: {
-            'Accept-Language': 'en',
-          }
-        });
-        if (!response.ok) throw new Error('Failed to fetch toilets');
-        const data = await response.json();
-        const toilets = data.map((item: any) => ({
-          lat: parseFloat(item.lat),
-          lng: parseFloat(item.lon),
-          name: item.display_name,
-        }));
-        setToiletMarkers(toilets);
-      } catch (error) {
-        console.error('Error fetching toilets:', error);
-        setToiletMarkers([]);
-      }
-    };
-    fetchToilets();
-  }, [showToilets, userLocation]);
+
 
   return (
     <MapContainer
@@ -258,14 +258,27 @@ const MapView = forwardRef<
           </CircleMarker>
         );
       })}
-      {/* Render toilet markers */}
-      {showToilets && toiletMarkers.map((toilet: { lat: number; lng: number; name: string }, idx: number) => (
-        <Marker key={`toilet-${idx}`} position={{ lat: toilet.lat, lng: toilet.lng }}>
-          <Popup>{toilet.name}</Popup>
-        </Marker>
-      ))}
+      {/* Render restroom markers */}
+      {restrooms && restrooms.map((restroom) => {
+        const isSelected = restroom.id === selectedRestroomId;
+        if (typeof restroom.lat !== 'number' || typeof restroom.lon !== 'number') {
+          console.warn(`Invalid restroom marker coordinates for id ${restroom.id}:`, restroom);
+          return null;
+        }
+        return (
+          <Marker
+            key={restroom.id}
+            position={{ lat: restroom.lat, lng: restroom.lon }}
+            icon={isSelected ? selectedRestroomIcon : restroomIcon}
+          >
+            <Popup>{restroom.name}</Popup>
+          </Marker>
+        );
+      })}
+      <MapAccessor onMap={setMap} />
       <RecenterControl ref={recenterRef} center={userLocation} />
     </MapContainer>
+
   )
 })
 

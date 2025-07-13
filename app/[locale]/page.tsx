@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useRef } from "react"
 import StopsView from "./components/StopsView"
+import RestroomView from "./components/RestroomView"
 import dynamic from "next/dynamic"
+
 import {
   Search,
   MapPin,
@@ -33,12 +35,28 @@ import { useRouter } from "next/navigation"
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false }) 
 
+interface Restroom {
+  id: string;
+  name: string;
+  address: string;
+  distance: number | null;
+  is_open: boolean;
+
+  lat: number;
+  lon: number;
+}
+
 export default function TransitApp() {
   const t = useTranslations()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("home")
-  const [showToilets, setShowToilets] = useState(false)
   const [isStopsViewOpen, setIsStopsViewOpen] = useState(false)
+  const [restrooms, setRestrooms] = useState<Restroom[]>([]);
+  const [selectedRestroomId, setSelectedRestroomId] = useState<string | null>(null);
+  const [loadingRestrooms, setLoadingRestrooms] = useState(false);
+  const [restroomError, setRestroomError] = useState<string | null>(null);
+
+
 
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedRoute, setSelectedRoute] = useState<any>(null)
@@ -60,11 +78,44 @@ export default function TransitApp() {
   const [routePolyline, setRoutePolyline] = useState<any[]>([]);
   const [loadingStops, setLoadingStops] = useState(false);
   const [reverseDirection, setReverseDirection] = useState(false);
-  const mapRef = useRef<{ recenter: () => void } | null>(null);
+  const mapRef = useRef<{ recenter: () => void; centerOnRestroom: (coords: { lat: number, lon: number }) => void; } | null>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
+  // Fetch restrooms when favorite tab is active
+  useEffect(() => {
+    if (activeTab === 'favorite' && userLocation) {
+      const fetchRestrooms = async () => {
+        setLoadingRestrooms(true);
+        setRestroomError(null);
+        try {
+          const response = await fetch(`/api/restrooms?lat=${userLocation.lat}&lng=${userLocation.lng}`);
+          if (!response.ok) {
+            throw new Error('Failed to fetch restrooms');
+          }
+          const data = await response.json();
+          setRestrooms(data);
+        } catch (error) {
+          console.error("Failed to fetch restrooms:", error);
+          if (error instanceof Error) {
+            setRestroomError(error.message);
+          } else {
+            setRestroomError("An unknown error occurred.");
+          }
+        } finally {
+          setLoadingRestrooms(false);
+        }
+      };
+      fetchRestrooms();
+    } else {
+      setRestrooms([]); // Clear restrooms when not on favorite tab
+    }
+  }, [activeTab, userLocation]);
+
+
   const handleRecenter = () => {
+
     console.log('[MapPin] recenter button clicked');
+
     if (mapRef.current) {
       console.log('[MapPin] mapRef.current found, calling recenter');
       mapRef.current.recenter();
@@ -180,6 +231,14 @@ export default function TransitApp() {
     setSelectedRoute(route)
     setIsStopsViewOpen(true)
   }
+
+  const handleRestroomSelect = (restroom: Restroom) => {
+    setSelectedRestroomId(restroom.id);
+    if (mapRef.current) {
+      mapRef.current.centerOnRestroom({ lat: restroom.lat, lon: restroom.lon });
+    }
+  };
+
 
 
   const languageLabelMap = {
@@ -548,9 +607,11 @@ export default function TransitApp() {
             ref={mapRef}
             userLocation={userLocation}
             routePolyline={isStopsViewOpen ? routePolyline : []}
-            showToilets={showToilets}
+            restrooms={restrooms}
+            selectedRestroomId={selectedRestroomId}
           />
         ) : (
+
           <div className="flex items-center justify-center h-full text-gray-400">{t('loadingMap')}</div>
         )}
 
@@ -593,7 +654,18 @@ export default function TransitApp() {
         )}
 
         {activeTab === 'home' && renderHomeSheet()}
+
+        {activeTab === 'favorite' && userLocation && (
+          <RestroomView
+            restrooms={restrooms}
+            loading={loadingRestrooms}
+            error={restroomError}
+            onRestroomSelect={handleRestroomSelect}
+          />
+        )}
+
       </div>
+
 
       {isStopsViewOpen && (
         <StopsView
@@ -627,14 +699,21 @@ export default function TransitApp() {
           >
             <Search className="w-6 h-6" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowToilets(!showToilets)}
-            className={`rounded-full ${showToilets ? "text-[#3DDC97]" : "text-gray-400"}`}
-          >
-            <Heart className="w-6 h-6" />
-          </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => {
+          if (activeTab === 'favorite') {
+            setActiveTab('home');
+          } else {
+            setActiveTab('favorite');
+          }
+        }}
+        className={`rounded-full ${activeTab === 'favorite' ? "text-[#3DDC97]" : "text-gray-400"}`}
+      >
+        <Heart className="w-6 h-6" />
+      </Button>
+
           <Button
             variant="ghost"
             size="icon"
