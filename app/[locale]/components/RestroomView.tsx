@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, useAnimation } from "framer-motion"
 import { MapPin, Clock, Navigation } from "lucide-react"
 
@@ -24,6 +24,15 @@ interface RestroomViewProps {
 export default function RestroomView({ restrooms, loading, error, onRestroomSelect, onClose }: RestroomViewProps) {
   const controls = useAnimation()
   const [panelPositions, setPanelPositions] = useState({ top: 100, middle: 500, bottom: 800 })
+
+  // Set panel positions dynamically on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const middle = window.innerHeight * 0.6
+      setPanelPositions({ top: 100, middle, bottom: window.innerHeight - 140 })
+      controls.start({ y: middle })
+    }
+  }, [controls])
 
   const onDragEnd = (event: any, info: any) => {
     const { point, velocity } = info
@@ -65,7 +74,7 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
       transition={{ type: "spring", stiffness: 400, damping: 40 }}
       dragConstraints={{ top: 0, bottom: typeof window !== "undefined" ? window.innerHeight : 900 }}
       dragElastic={{ top: 0.05, bottom: 0.05 }}
-      className="absolute top-0 left-0 right-0 h-full bg-[#23272F] rounded-t-2xl shadow-2xl flex flex-col z-20"
+      className="absolute top-0 left-0 right-0 h-full bg-[#23272F] rounded-t-2xl shadow-2xl flex flex-col z-10"
       style={{ touchAction: "none" }}
     >
       <div className="p-4 flex-shrink-0 text-center cursor-grab active:cursor-grabbing">

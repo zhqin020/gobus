@@ -51,10 +51,24 @@ export default function TransitApp() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("home")
   const [isStopsViewOpen, setIsStopsViewOpen] = useState(false)
-  const [restrooms, setRestrooms] = useState<Restroom[]>([]);
+  const [restrooms, setRestrooms] = useState<import("./components/RestroomView").Restroom[]>([]);
   const [selectedRestroomId, setSelectedRestroomId] = useState<string | null>(null);
   const [loadingRestrooms, setLoadingRestrooms] = useState(false);
   const [restroomError, setRestroomError] = useState<string | null>(null);
+
+  // Hide RestroomView when activeTab changes away from 'favorite'
+  useEffect(() => {
+    if (activeTab !== 'favorite') {
+      setSelectedRestroomId(null);
+    }
+  }, [activeTab]);
+
+  // Hide StopsView when activeTab changes
+  useEffect(() => {
+    if (activeTab !== 'favorite') {
+      setIsStopsViewOpen(false);
+    }
+  }, [activeTab]);
 
 
 
@@ -698,12 +712,15 @@ export default function TransitApp() {
 
       {activeTab === "settings" && renderSettingsView()}
 
-      <footer className="w-full max-w-md mx-auto bg-[#23272F] border-t border-gray-700">
+      <footer className="w-full max-w-md mx-auto bg-[#23272F] border-t border-gray-700 z-30">
         <div className="flex justify-around p-2">
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setActiveTab("home")}
+            onClick={() => {
+              setActiveTab("home");
+              setIsStopsViewOpen(false);
+            }}
             className={`rounded-full ${activeTab === "home" ? "text-[#3DDC97]" : "text-gray-400"}`}
           >
             <Home className="w-6 h-6" />
@@ -711,7 +728,10 @@ export default function TransitApp() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setActiveTab("search")}
+            onClick={() => {
+              setActiveTab("search");
+              setIsStopsViewOpen(false);
+            }}
             className={`rounded-full ${activeTab === "search" ? "text-[#3DDC97]" : "text-gray-400"}`}
           >
             <Search className="w-6 h-6" />
@@ -722,19 +742,23 @@ export default function TransitApp() {
         onClick={() => {
           if (activeTab === 'favorite') {
             setActiveTab('home');
+            setIsStopsViewOpen(false);
           } else {
             setActiveTab('favorite');
+            setIsStopsViewOpen(false);
           }
         }}
         className={`rounded-full ${activeTab === 'favorite' ? "text-[#3DDC97]" : "text-gray-400"}`}
       >
         <Heart className="w-6 h-6" />
       </Button>
-
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setActiveTab("settings")}
+            onClick={() => {
+              setActiveTab("settings");
+              setIsStopsViewOpen(false);
+            }}
             className={`rounded-full ${activeTab === "settings" ? "text-[#3DDC97]" : "text-gray-400"}`}
           >
             <Settings className="w-6 h-6" />
