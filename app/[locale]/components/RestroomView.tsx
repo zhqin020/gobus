@@ -81,7 +81,7 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
       </div>
       <div className="overflow-y-auto px-4 flex-grow pb-4">
         {restrooms.length === 0 && <p className="text-gray-400 text-center">No restrooms found nearby.</p>}
-        {restrooms.map((restroom) => (
+        {restrooms.map((restroom, index) => (
           <div
             key={restroom.id}
             onClick={() => onRestroomSelect(restroom)}
@@ -96,7 +96,7 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
                 </div>
               ))}
             </div>
-            <div className="mt-3 pt-3 border-t border-gray-600 flex justify-between items-center text-xs">
+            <div className="mt-3 pt-3 flex justify-between items-center text-xs">
               <div className="flex items-center text-gray-300">
                 <Clock className="w-4 h-4 mr-2 flex-shrink-0" />
                 <span>
@@ -118,6 +118,9 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
                 <span className="text-xs">Navigate</span>
               </button>
             </div>
+            {index !== restrooms.length - 1 && (
+              <div className="border-t border-gray-600 mt-3" />
+            )}
           </div>
         ))}
       </div>
