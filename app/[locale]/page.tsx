@@ -81,19 +81,36 @@ export default function TransitApp() {
   const mapRef = useRef<{ recenter: () => void; centerOnRestroom: (coords: { lat: number, lon: number }) => void; } | null>(null);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch restrooms when favorite tab is active
+  // Fetch restrooms when favorite tab is active, with localStorage caching
   useEffect(() => {
     if (activeTab === 'favorite' && userLocation) {
       const fetchRestrooms = async () => {
         setLoadingRestrooms(true);
         setRestroomError(null);
         try {
-          const response = await fetch(`/api/restrooms?lat=${userLocation.lat}&lng=${userLocation.lng}`);
-          if (!response.ok) {
-            throw new Error('Failed to fetch restrooms');
+          const cacheKey = 'restroomsCache';
+          const cacheTimestampKey = 'restroomsCacheTimestamp';
+          const cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours
+
+          const cachedData = localStorage.getItem(cacheKey);
+          const cachedTimestamp = localStorage.getItem(cacheTimestampKey);
+          const now = Date.now();
+
+          if (cachedData && cachedTimestamp && now - parseInt(cachedTimestamp) < cacheExpiry) {
+            // Use cached data
+            setRestrooms(JSON.parse(cachedData));
+          } else {
+            // Fetch from server API
+            const response = await fetch(`/api/restrooms?lat=${userLocation.lat}&lng=${userLocation.lng}`);
+            if (!response.ok) {
+              throw new Error('Failed to fetch restrooms');
+            }
+            const data = await response.json();
+            setRestrooms(data);
+            // Update cache
+            localStorage.setItem(cacheKey, JSON.stringify(data));
+            localStorage.setItem(cacheTimestampKey, now.toString());
           }
-          const data = await response.json();
-          setRestrooms(data);
         } catch (error) {
           console.error("Failed to fetch restrooms:", error);
           if (error instanceof Error) {
@@ -607,7 +624,7 @@ export default function TransitApp() {
             ref={mapRef}
             userLocation={userLocation}
             routePolyline={isStopsViewOpen ? routePolyline : []}
-            restrooms={restrooms}
+            restrooms={restrooms}  // pass full restroom objects including address
             selectedRestroomId={selectedRestroomId}
           />
         ) : (

@@ -15,9 +15,33 @@ const API_ENDPOINTS = {
 };
 
 
-## 本地缓存
-由于洗手间的信息相对固定，尽量使用localStorage来缓存数据，避免每次都需要请求接口。
-服务端也可参照 GTFS 更新数据的方式，定期更新数据。如果数据过期24小时，则更新数据库
+## 本地缓存和数据更新
+由于洗手间的信息相对固定，尽量使用localStorage来缓存数据，避免每次都需要请求接口， 频繁访问公共接口会被限制访问甚至进入黑名单。
+数据更新服务端也可参照 GTFS 更新数据的方式，定期更新数据。如果数据过期24小时，则更新数据库。
+优先在本地缓存中查找，如果缓存中不存在，则从服务器的数据库查找，并更新本地缓存。
+如果服务器没有数据，则访问 https://overpass-api.de， https://nominatim.openstreetmap.org/， 增量更新服务器的数据库
+
+由于数据库里已经保存了GTFS 公交信息，会定期更新。目前是先删除再重建、更新。如果再添加洗手间数据，当定期更新GTFS数据时就不应该在更新前删除数据库，而是增量更新。
+根据上面的需求，需要对已有的数据库更新程序进行修改。
+
+### Restroom 数据更新和读取方案
+
+- 修改 `scripts/import-gtfs-sqlite.js`，支持增量更新，避免每次导入时删除整个数据库。
+- 新增 `restrooms` 表，包含字段：`id`、`name`、`address`、`lat`、`lon`、`distance`、`is_open`。
+- 直接从公共数据接口（如温哥华、 多伦多开放数据平台）导入洗手间数据，取消使用 `data/restrooms.json` 文件。
+- 使用 UPSERT 语句实现数据库的增量更新。
+- 通过比较数据更新时间戳或版本号判断是否需要更新数据库，从而触发增量更新。建议将洗手间数据的更新时间保存到 `data/gtfs_version.json` 文件中。
+- 当洗手间数据超过一周未更新时，视为过期，客户端查询请求将直接访问公共数据平台以获取最新数据，并触发服务器端数据更新。
+- 该更新逻辑集成在现有 GTFS 数据导入流程中，确保洗手间数据与公交数据同步更新。
+- 客户端优先使用 `localStorage` 缓存洗手间数据，提升访问速度并减少公共接口请求频率。
+-当缓存数据过期或不存在时，数据更新应由前端驱动：
+  - 客户端先在本地缓存查询数据。
+  - 查询失败时，向服务器发送查询请求。
+  - 服务器数据库无结果或数据过期时，访问公共数据平台获取最新数据并更新数据库。
+  - 这样确保数据及时更新且减少不必要的公共接口请求。
+
+此方案确保洗手间数据的及时更新和高效访问，避免频繁请求公共接口导致的访问限制问题。
+
 
 ## AI asks
 Q:Do you want the new RestroomView component to include both the list of restrooms and the map markers, or should the map markers remain managed by the MapView component separately?
@@ -43,6 +67,8 @@ A: restroom data fetching be triggered only when the favorite tab is active, and
         *   `lng`
         *   `distance`
         *   `is_open` (or a similar availability field)
+    *   Implement logic to check the restroom data version timestamp in `data/gtfs_version.json`.
+    *   If the restroom data is expired (older than one week), fetch fresh data from the public API and update the database.
 
 ### 2. Create the `RestroomView` Component
 

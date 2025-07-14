@@ -87,17 +87,25 @@ async function importAll() {
 
   console.log('[GTFS Import] Starting import process');
   try {
-    if (fs.existsSync(DB_PATH)) {
-      console.log('[GTFS Import] Removing existing database file');
+    const dbExists = fs.existsSync(DB_PATH);
+    const db = new sqlite3.Database(DB_PATH);
+
+    // Load version info
+    let versionInfo = {};
+    const versionFilePath = path.join(__dirname, '../data/gtfs_version.json');
+    if (fs.existsSync(versionFilePath)) {
       try {
-        fs.unlinkSync(DB_PATH);
-      } catch (unlinkErr) {
-        console.warn('[GTFS Import] Could not remove database file, it may be in use. Trying to continue...', unlinkErr);
+        versionInfo = JSON.parse(fs.readFileSync(versionFilePath, 'utf-8'));
+      } catch (e) {
+        console.warn('[GTFS Import] Failed to parse version file, ignoring.');
       }
     }
 
-    console.log('[GTFS Import] Creating new SQLite database');
-    const db = new sqlite3.Database(DB_PATH);
+    if (!dbExists) {
+      console.log('[GTFS Import] Creating new SQLite database');
+    } else {
+      console.log('[GTFS Import] Using existing database for incremental update');
+    }
 
     const files = fs.readdirSync(GTFS_DIR).filter(f => f.endsWith('.txt'));
     console.log(`[GTFS Import] Found ${files.length} GTFS files to import`);
@@ -121,11 +129,101 @@ async function importAll() {
       console.log(`[GTFS Import] Completed ${file} -> ${table} (${rows.length} rows)`);
     }
 
+    // Check restroom data version
+    const restroomVersion = versionInfo.restroomVersion || 0;
+    const now = Date.now();
+    const oneWeek = 7 * 24 * 60 * 60 * 1000;
+    if (now - restroomVersion > oneWeek) {
+      console.log('[GTFS Import] Restroom data is expired or missing, updating...');
+
+      // Fetch restroom data from public API and update database here
+      const fetch = require('node-fetch');
+
+      // Example: Fetch from Vancouver open data API
+      const VANCOUVER_API = 'https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/public-washrooms/records?limit=100';
+
+      try {
+        const response = await fetch(VANCOUVER_API);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch restroom data: ${response.statusText}`);
+        }
+        const data = await response.json();
+
+        // Parse and map data to restroom objects
+        const restrooms = data.records.map((record) => {
+          const fields = record.fields;
+          return {
+            id: record.recordid,
+            name: fields.name || '',
+            address: fields.address || '',
+            lat: fields.latitude,
+            lon: fields.longitude,
+            distance: null, // to be calculated on query
+            is_open: true, // assume true or parse if available
+          };
+        });
+
+        // Create restrooms table if not exists
+        await new Promise((resolve, reject) => {
+          db.run(`CREATE TABLE IF NOT EXISTS restrooms (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            address TEXT,
+            lat REAL,
+            lon REAL,
+            distance REAL,
+            is_open INTEGER
+          );`, (err) => {
+            if (err) reject(err);
+            else resolve(null);
+          });
+        });
+
+        // Upsert restroom data
+        const upsertStmt = db.prepare(`INSERT INTO restrooms (id, name, address, lat, lon, distance, is_open)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name=excluded.name,
+            address=excluded.address,
+            lat=excluded.lat,
+            lon=excluded.lon,
+            distance=excluded.distance,
+            is_open=excluded.is_open;`);
+
+        db.serialize(() => {
+          db.run('BEGIN TRANSACTION');
+          for (const restroom of restrooms) {
+            upsertStmt.run([
+              restroom.id,
+              restroom.name,
+              restroom.address,
+              restroom.lat,
+              restroom.lon,
+              restroom.distance,
+              restroom.is_open ? 1 : 0
+            ]);
+          }
+          db.run('COMMIT');
+        });
+
+        upsertStmt.finalize();
+        console.log(`[GTFS Import] Imported ${restrooms.length} restrooms`);
+
+        // Update version info
+        versionInfo.restroomVersion = now;
+        fs.writeFileSync(versionFilePath, JSON.stringify(versionInfo, null, 2));
+      } catch (error) {
+        console.error('[GTFS Import] Error updating restroom data:', error);
+      }
+    } else {
+      console.log('[GTFS Import] Restroom data is up to date, skipping update.');
+    }
+
     db.close((err) => {
       if (err) {
         console.error('[GTFS Import] Error closing database:', err);
       } else {
-        console.log('[GTFS Import] Successfully imported all GTFS tables to gtfs.sqlite');
+        console.log('[GTFS Import] Successfully imported all GTFS tables and restrooms to gtfs.sqlite');
       }
       try {
         fs.unlinkSync(LOCK_FILE);
