@@ -36,3 +36,14 @@ stopsview keep showing '加载线路数据中'，  no data shown  ，已解决
 2. 在站点下方显示换乘线路编号，优先显示地铁，然后是BUS，区分方法：routes.route_type=1 (subway), 3 (bus)
 3. 显示风格和图标按照 get-route-stops-v2.tsx
 4. 换乘线路的查询方法，参照 docs\refer\get-route-stops-v2.tsx 中的 function getTransferBusLinesForArea 
+
+## 遗留问题：
+1. no result when there's no data in local, it seems that the search function only search cached data in local. fixed
+2. 查询结果的显示：
+    i: stop:  [stop icon]  [stop_code]  [stop name]
+    ii: Route: [stop/train icon] [route short name] [trip_headsign]
+    iii: Address: [MapPin icon] [address]
+3. 查询结果点击后的跳转：
+    i: stop:  search view draggable panel.  依次显示：stop info( id, address), Route list(格式和 homeview 中的 route list 一样)
+    ii: Route: stopsview.  almost done
+    iii: Address: homeview.  done
