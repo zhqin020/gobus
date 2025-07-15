@@ -41,6 +41,33 @@ export async function GET(req: NextRequest) {
   const radius = parseInt(searchParams.get('radius') || '30000', 10); // 默认30km
   const languageParam = searchParams.get('language') || 'en';
   console.log('[proxy-nominatim] 查询参数:', { q, city, lat, lng, radius });
+
+  // If lat and lng are provided but no q, perform reverse geocoding
+  if (!q && !isNaN(lat) && !isNaN(lng)) {
+    try {
+      const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+      const response = await fetch(nominatimUrl, {
+        headers: {
+          'User-Agent': 'gobus-app/1.0',
+          'Accept-Language': languageParam,
+        },
+      });
+      if (!response.ok) {
+        console.log('[proxy-nominatim] Reverse geocoding failed:', response.status);
+        return NextResponse.json([], { status: response.status });
+      }
+      const data = await response.json();
+      if (data && data.display_name) {
+        return NextResponse.json([data.display_name]);
+      } else {
+        return NextResponse.json([]);
+      }
+    } catch (error) {
+      console.log('[proxy-nominatim] Reverse geocoding error:', error);
+      return NextResponse.json([]);
+    }
+  }
+
   if (!q) {
     return NextResponse.json([], { status: 200 });
   }

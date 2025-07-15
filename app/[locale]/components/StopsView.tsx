@@ -195,8 +195,8 @@ export default function StopsView({
         transition={{ type: "spring", stiffness: 400, damping: 40 }}
         dragConstraints={{ top: 0, bottom: typeof window !== "undefined" ? window.innerHeight : 900 }}
         dragElastic={{ top: 0.05, bottom: 0.05 }}
-        className="absolute top-0 left-0 right-0 h-full bg-[#23272F] rounded-t-2xl shadow-2xl flex flex-col z-10"
-        style={{ touchAction: "none" }}
+      className="absolute left-0 right-0 bg-[#23272F] rounded-t-2xl shadow-2xl flex flex-col z-10"
+      style={{ touchAction: "none", height: '60vh', top: panelPositions.middle }}
       >
         <div className="p-4 flex-shrink-0 text-center cursor-grab active:cursor-grabbing">
           <div className="w-12 h-1.5 bg-gray-600 rounded-full mx-auto mb-2" />

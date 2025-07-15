@@ -98,7 +98,7 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
           >
             <div className="font-bold text-white text-lg truncate">{restroom.address}</div>
             <div className="mt-1 text-gray-300 text-sm">
-              {Object.entries(restroom.tags).map(([key, value]) => (
+              {Object.entries(restroom.tags ?? {}).map(([key, value]) => (
                 <div key={key} className="flex items-center gap-1">
                   <span className="font-mono text-xs text-gray-400">{key}:</span>
                   <span>{String(value)}</span>

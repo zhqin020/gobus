@@ -5,9 +5,8 @@ import { messages } from './messages'
 import '../globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.dev',
+  title: 'Gobus Canada',
+  description: 'Created by  ZhQin 2025', 
 }
 
 const locales = ['en', 'zh', 'fr']
