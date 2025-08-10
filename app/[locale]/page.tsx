@@ -408,11 +408,14 @@ export default function TransitApp() {
   };
 
   // Handle selecting an address from search results
-  const handleAddressSelect = (address: string) => {
+  const handleAddressSelect = (address: any) => {
+    // 确保获取到地址字符串
+    const addressStr = typeof address === 'string' ? address : address.address || JSON.stringify(address);
+    
     if (editingAddressType === "home") {
-      setHomeAddress(address);
+      setHomeAddress(addressStr);
     } else if (editingAddressType === "work") {
-      setWorkAddress(address);
+      setWorkAddress(addressStr);
     }
     setEditingAddressType(null);
     setAddressSearchInput("");
@@ -625,7 +628,7 @@ export default function TransitApp() {
                         className="p-2 cursor-pointer hover:bg-green-700 text-white"
                         onClick={() => handleAddressSelect(addr)}
                       >
-                        {typeof addr === 'string' ? addr : JSON.stringify(addr)}
+                        {typeof addr === 'string' ? addr : addr.address || JSON.stringify(addr)}
                       </div>
                     ))
                   ) : (
