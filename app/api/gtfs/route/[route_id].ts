@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import { promises as fs } from 'fs';
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
-import { gtfsCache } from '../../../lib/cache';
-
+import { gtfsCache } from '../../../../lib/cache';
+import { NextRequest, NextResponse } from 'next/server';
 
 import fsSync from 'fs';
 
@@ -38,18 +37,6 @@ export async function GET(req: NextRequest, { params }: { params: { route_id: st
       driver: sqlite3.Database,
     });
 
-
-
-    // Query route info from JSON file for stops, polyline, directions
-    // const dataPath = path.join(process.cwd(), 'data', 'gtfs_routes.json');
-    // const content = await fs.readFile(dataPath, 'utf-8');
-    // const routes = JSON.parse(content);
-    // const route = routes.find((r: any) => String(r.route_id) === String(route_id));
-    // if (!route) {
-    //   console.log('[API] Route not found for route_id:', route_id);
-    //   return NextResponse.json({ error: 'Route not found' }, { status: 404 });
-    // }
-
     // Query route info from database
     const route = await db.get('SELECT * FROM routes WHERE route_id = ?', route_id);
     if (!route) {
@@ -65,120 +52,70 @@ export async function GET(req: NextRequest, { params }: { params: { route_id: st
        JOIN trips t ON st.trip_id = t.trip_id
        WHERE t.route_id = ?
        GROUP BY s.stop_id
-       ORDER BY MIN(st.stop_sequence)`,
+       ORDER BY st.stop_sequence`,
       route_id
     );
-
-    // Query polyline and directions from database or other source as needed
-    // For now, set empty arrays or fetch accordingly
-    const polyline = []; // TODO: fetch polyline data if available
-    const directions = []; // TODO: fetch directions data if available
 
     if (!stops || stops.length === 0) {
       console.log('[API] No stops found for route_id:', route_id);
       return NextResponse.json({ error: 'No stops found' }, { status: 404 });
     }
 
-
-    // Query stop_times for this route_id from SQLite
-    const stopTimes = await db.all(
-      `SELECT * FROM stop_times WHERE trip_id IN (
-        SELECT trip_id FROM trips WHERE route_id = ?
-      ) ORDER BY stop_sequence ASC`,
-      route_id
-    );
-
-    // Query transfers for each stop - with debug logging
-    const stopsWithTransfers = await Promise.all(
+    // Process stops with arrival times
+    const stopsWithTimes = await Promise.all(
       stops.map(async (stop: any) => {
-        console.log(`Querying transfers for stop ${stop.stop_id} (${stop.stop_name})`);
-        const transfers = await db.all(
-          `SELECT t.*, r.route_short_name, r.route_type 
-           FROM transfers t
-           JOIN routes r ON t.to_route_id = r.route_id
-           WHERE t.from_stop_id = ?`,
+        // Get stop times for this stop
+        const stopTimes = await db.all(
+          `SELECT st.arrival_time, st.departure_time, t.trip_headsign, r.route_short_name
+           FROM stop_times st
+           JOIN trips t ON st.trip_id = t.trip_id
+           JOIN routes r ON t.route_id = r.route_id
+           WHERE st.stop_id = ?
+           ORDER BY st.arrival_time LIMIT 5`,
           stop.stop_id
         );
-        console.log(`Found ${transfers.length} transfers for stop ${stop.stop_id}:`, transfers);
-        
+
+        // Format arrival times
+        const formattedStopTimes = stopTimes.map((st: any) => {
+          const [hours, minutes, seconds] = st.arrival_time.split(':').map(Number);
+          const arrivalDate = new Date();
+          arrivalDate.setHours(hours, minutes, seconds);
+
+          // Handle midnight rollover
+          if (arrivalDate < new Date()) {
+            arrivalDate.setDate(arrivalDate.getDate() + 1);
+          }
+
+          const now = new Date();
+          const diffMinutes = Math.floor((arrivalDate.getTime() - now.getTime()) / (1000 * 60));
+
+          return {
+            arrival_time: st.arrival_time,
+            departure_time: st.departure_time,
+            route_short_name: st.route_short_name,
+            trip_headsign: st.trip_headsign,
+            minutes_to_arrival: diffMinutes > 0 ? diffMinutes : 0,
+            calculated_time: arrivalDate.toISOString()
+          };
+        });
+
         return {
           ...stop,
-          transfers: transfers.length > 0 ? transfers : undefined,
+          stopTimes: formattedStopTimes
         };
       })
     );
 
-    // Calculate arrival times
-    const now = new Date();
-    console.log('Current time:', now.toISOString());
-    console.log('Processing stops with times...');
-    
-    // Process all stops with their times
-    const stopsWithTimes = await Promise.all(
-      stopsWithTransfers.map(async (stop: any) => {
-        console.log(`Processing stop ${stop.stop_id} (${stop.stop_name})`);
-        
-        // Get all stop times for this stop
-        const timesForStop = stopTimes.filter((st: any) => st.stop_id === stop.stop_id);
-        console.log(`Found ${timesForStop.length} times for stop ${stop.stop_id}`);
-        
-        // Format stop times with route info
-        const formattedStopTimes = await Promise.all(
-          timesForStop.map(async (st: any) => {
-            const trip = await db.get('SELECT * FROM trips WHERE trip_id = ?', st.trip_id);
-            const route = trip ? await db.get('SELECT * FROM routes WHERE route_id = ?', trip.route_id) : null;
-            
-            // Parse arrival time (HH:MM:SS format)
-            const [hours, minutes] = st.arrival_time.split(':').map(Number);
-            let arrivalDate = new Date(
-              now.getFullYear(),
-              now.getMonth(),
-              now.getDate(),
-              hours,
-              minutes
-            );
-            
-            // Handle times after midnight (e.g. 25:30 becomes next day 1:30)
-            if (hours >= 24) {
-              arrivalDate = new Date(arrivalDate.getTime() + (hours - 24) * 60 * 60 * 1000);
-            }
-            
-            // Calculate minutes until arrival
-            const diffMinutes = Math.floor((arrivalDate.getTime() - now.getTime()) / (1000 * 60));
-            
-            console.log(`Stop ${stop.stop_id} time ${st.arrival_time}: ${diffMinutes} minutes from now`);
-            
-            return {
-              arrival_time: st.arrival_time,
-              departure_time: st.departure_time,
-              route_short_name: route?.route_short_name,
-              trip_headsign: trip?.trip_headsign,
-              minutes_to_arrival: diffMinutes > 0 ? diffMinutes : 0,
-              calculated_time: arrivalDate.toISOString()
-            };
-          })
-        );
-      
-      // Format transfer routes
-      const transferRoutes = stop.transfers 
-        ? [...new Set(stop.transfers.map((t: any) => t.route_short_name))] 
-        : undefined;
-      
-      return {
-        ...stop,
-        stopTimes: formattedStopTimes.length > 0 ? formattedStopTimes : undefined,
-        transferRoutes
-      };
-    });
+    // Get route polyline
+    const polyline = await db.get(
+      'SELECT shape_points FROM shapes WHERE shape_id = ?',
+      route.shape_id
+    );
 
-    console.log('Processed stops with times:', stopsWithTimes);
-    console.log('First stop arrival times:', stopsWithTimes[0]?.stopTimes);
-    
     const responseData = {
-      stops: stopsWithTimes || [],
-      polyline: polyline || [],
-      directions: directions || [],
-      // Removed raw stop_times to avoid confusion with processed data
+      stops: stopsWithTimes,
+      polyline: polyline?.shape_points ? JSON.parse(polyline.shape_points) : [],
+      route
     };
 
     gtfsCache.set(`route_${route_id}`, responseData, currentEtag);
@@ -186,161 +123,8 @@ export async function GET(req: NextRequest, { params }: { params: { route_id: st
     const response = NextResponse.json(responseData);
     response.headers.set('Cache-Control', 'no-store, max-age=0');
     return response;
-  } catch (e: any) {
-    console.error('[API] Error processing route data:', e.message);
-    return NextResponse.json({ error: 'Data not found' }, { status: 404 });
-  }
-}
-
-
-    // Query route info from JSON file for stops, polyline, directions
-    // const dataPath = path.join(process.cwd(), 'data', 'gtfs_routes.json');
-    // const content = await fs.readFile(dataPath, 'utf-8');
-    // const routes = JSON.parse(content);
-    // const route = routes.find((r: any) => String(r.route_id) === String(route_id));
-    // if (!route) {
-    //   console.log('[API] Route not found for route_id:', route_id);
-    //   return NextResponse.json({ error: 'Route not found' }, { status: 404 });
-    // }
-
-    // Query route info from database
-    const route = await db.get('SELECT * FROM routes WHERE route_id = ?', route_id);
-    if (!route) {
-      console.log('[API] Route not found for route_id:', route_id);
-      return NextResponse.json({ error: 'Route not found' }, { status: 404 });
-    }
-
-    // Query stops for this route
-    const stops = await db.all(
-      `SELECT s.stop_id, s.stop_name, s.stop_lat, s.stop_lon
-       FROM stops s
-       JOIN stop_times st ON s.stop_id = st.stop_id
-       JOIN trips t ON st.trip_id = t.trip_id
-       WHERE t.route_id = ?
-       GROUP BY s.stop_id
-       ORDER BY MIN(st.stop_sequence)`,
-      route_id
-    );
-
-    // Query polyline and directions from database or other source as needed
-    // For now, set empty arrays or fetch accordingly
-    const polyline = []; // TODO: fetch polyline data if available
-    const directions = []; // TODO: fetch directions data if available
-
-    if (!stops || stops.length === 0) {
-      console.log('[API] No stops found for route_id:', route_id);
-      return NextResponse.json({ error: 'No stops found' }, { status: 404 });
-    }
-
-
-    // Query stop_times for this route_id from SQLite
-    const stopTimes = await db.all(
-      `SELECT * FROM stop_times WHERE trip_id IN (
-        SELECT trip_id FROM trips WHERE route_id = ?
-      ) ORDER BY stop_sequence ASC`,
-      route_id
-    );
-
-    // Query transfers for each stop - with debug logging
-    const stopsWithTransfers = await Promise.all(
-      route.stops.map(async (stop: any) => {
-        console.log(`Querying transfers for stop ${stop.stop_id} (${stop.stop_name})`);
-        const transfers = await db.all(
-          `SELECT t.*, r.route_short_name, r.route_type 
-           FROM transfers t
-           JOIN routes r ON t.to_route_id = r.route_id
-           WHERE t.from_stop_id = ?`,
-          stop.stop_id
-        );
-        console.log(`Found ${transfers.length} transfers for stop ${stop.stop_id}:`, transfers);
-        
-        return {
-          ...stop,
-          transfers: transfers.length > 0 ? transfers : undefined,
-        };
-      })
-    );
-
-    // Calculate arrival times
-    const now = new Date();
-    console.log('Current time:', now.toISOString());
-    console.log('Processing stops with times...');
-    
-    // Process all stops with their times
-    const stopsWithTimes = await Promise.all(
-      stopsWithTransfers.map(async (stop: any) => {
-        console.log(`Processing stop ${stop.stop_id} (${stop.stop_name})`);
-        
-        // Get all stop times for this stop
-        const timesForStop = stopTimes.filter((st: any) => st.stop_id === stop.stop_id);
-        console.log(`Found ${timesForStop.length} times for stop ${stop.stop_id}`);
-        
-        // Format stop times with route info
-        const formattedStopTimes = await Promise.all(
-          timesForStop.map(async (st: any) => {
-            const trip = await db.get('SELECT * FROM trips WHERE trip_id = ?', st.trip_id);
-            const route = trip ? await db.get('SELECT * FROM routes WHERE route_id = ?', trip.route_id) : null;
-            
-            // Parse arrival time (HH:MM:SS format)
-            const [hours, minutes] = st.arrival_time.split(':').map(Number);
-            let arrivalDate = new Date(
-              now.getFullYear(),
-              now.getMonth(),
-              now.getDate(),
-              hours,
-              minutes
-            );
-            
-            // Handle times after midnight (e.g. 25:30 becomes next day 1:30)
-            if (hours >= 24) {
-              arrivalDate = new Date(arrivalDate.getTime() + (hours - 24) * 60 * 60 * 1000);
-            }
-            
-            // Calculate minutes until arrival
-            const diffMinutes = Math.floor((arrivalDate.getTime() - now.getTime()) / (1000 * 60));
-            
-            console.log(`Stop ${stop.stop_id} time ${st.arrival_time}: ${diffMinutes} minutes from now`);
-            
-            return {
-              arrival_time: st.arrival_time,
-              departure_time: st.departure_time,
-              route_short_name: route?.route_short_name,
-              trip_headsign: trip?.trip_headsign,
-              minutes_to_arrival: diffMinutes > 0 ? diffMinutes : 0,
-              calculated_time: arrivalDate.toISOString()
-            };
-          })
-        );
-      
-      // Format transfer routes
-      const transferRoutes = stop.transfers 
-        ? [...new Set(stop.transfers.map((t: any) => t.route_short_name))] 
-        : undefined;
-      
-      return {
-        ...stop,
-        stopTimes: formattedStopTimes.length > 0 ? formattedStopTimes : undefined,
-        transferRoutes
-      };
-    });
-
-    console.log('Processed stops with times:', stopsWithTimes);
-    console.log('First stop arrival times:', stopsWithTimes[0]?.stopTimes);
-    
-    const responseData = {
-      stops: stopsWithTimes || [],
-      polyline: route.polyline || [],
-      directions: route.directions || [],
-      // Removed raw stop_times to avoid confusion with processed data
-    };
-
-    gtfsCache.set(`route_${route_id}`, responseData, currentEtag);
-
-    const response = NextResponse.json(responseData);
-    response.headers.set('Cache-Control', 'no-store, max-age=0');
-    return response;
-  } catch (e: any) {
-    console.error('[API] Error processing route data:', e.message);
-    return NextResponse.json({ error: 'Data not found' }, { status: 404 });
+  } catch (error) {
+    console.error('Database connection error:', error);
+    return NextResponse.json({ error: 'Failed to connect to database' }, { status: 500 });
   }
 }

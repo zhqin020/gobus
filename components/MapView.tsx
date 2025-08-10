@@ -260,22 +260,22 @@ const MapView = forwardRef<
         );
       })}
       {/* Render restroom markers */}
-          {restrooms && restrooms.map((restroom) => {
-            const isSelected = restroom.id === selectedRestroomId;
-            if (typeof restroom.lat !== 'number' || typeof restroom.lon !== 'number') {
-              console.warn(`Invalid restroom marker coordinates for id ${restroom.id}:`, restroom);
-              return null;
-            }
-            return (
-              <Marker
-                key={restroom.id}
-                position={{ lat: restroom.lat, lng: restroom.lon }}
-                icon={isSelected ? selectedRestroomIcon : restroomIcon}
-              >
-                <Popup>{restroom.address}</Popup>
-              </Marker>
-            );
-          })}
+      {(Array.isArray(restrooms) ? restrooms : []).map((restroom) => {
+        const isSelected = restroom.id === selectedRestroomId;
+        if (typeof restroom.lat !== 'number' || typeof restroom.lon !== 'number') {
+          console.warn(`Invalid restroom marker coordinates for id ${restroom.id}:`, restroom);
+          return null;
+        }
+        return (
+          <Marker
+            key={restroom.id}
+            position={{ lat: restroom.lat, lng: restroom.lon }}
+            icon={isSelected ? selectedRestroomIcon : restroomIcon}
+          >
+            <Popup>{restroom.address}</Popup>
+          </Marker>
+        );
+      })}
       <MapAccessor onMap={setMap} />
       <RecenterControl ref={recenterRef} center={userLocation} />
     </MapContainer>

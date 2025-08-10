@@ -1,8 +1,12 @@
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
-export default async function handler(req, res) {
-  const q = req.query.q?.toLowerCase() || '';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // 处理查询参数可能是字符串或字符串数组的情况
+  const qParam = req.query.q;
+  const q = typeof qParam === 'string' ? qParam.toLowerCase() : Array.isArray(qParam) ? qParam[0]?.toLowerCase() || '' : '';
 
   if (!q) {
     res.status(200).json([]);

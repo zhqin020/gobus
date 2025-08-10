@@ -57,6 +57,12 @@ class GTFSDataCache {
     if (expireAt === undefined) return false;
     return Date.now() > expireAt;
   }
+
+  // Clear cache entry by key
+  clear(key: string): void {
+    this.cache.delete(key);
+    this.expirationMap.delete(key);
+  }
 }
 
 export const gtfsCache = GTFSDataCache.getInstance();

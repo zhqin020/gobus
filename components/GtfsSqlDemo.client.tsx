@@ -106,7 +106,7 @@ export default function GtfsSqlDemo() {
       <div>数据库状态: {dbReady ? '已加载' : '加载中'} {offline && '(离线)'}</div>
       <h3>线路示例 (前20条):</h3>
       <ul>
-        {routes.map(r => (
+        {(Array.isArray(routes) ? routes : []).map(r => (
           <li key={r.route_id}>{r.route_short_name} - {r.route_long_name}</li>
         ))}
       </ul>

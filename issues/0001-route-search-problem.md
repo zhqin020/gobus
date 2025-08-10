@@ -45,5 +45,10 @@ stopsview keep showing '加载线路数据中'，  no data shown  ，已解决
     iii: Address: [MapPin icon] [address]
 3. 查询结果点击后的跳转：
     i: stop:  search view draggable panel.  依次显示：stop info( id, address), Route list(格式和 homeview 中的 route list 一样)
-    ii: Route: stopsview.  almost done
-    iii: Address: homeview.  done
+    ii: Route: stopsview.  done
+    iii: Address: homeview.  显示选中的地址详细信息和附近的公交线路
+问题还是没有解决。看来设计上有问题，需要进行大的改动
+
+点击地址后，不要跳转到homeview,  homeview的功能只有一个：显示当前位置和附近的公交信息。
+
+点击地址后，在search tabpage 显示draggable panel, 格式和 homeview 的相同，但是内容是选中的地址，以及附近的公交信息

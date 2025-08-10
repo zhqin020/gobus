@@ -100,7 +100,7 @@ function queryRestroomsFromDB(db: sqlite3.Database, lat: number, lng: number): P
       lon REAL,
       distance REAL,
       is_open INTEGER
-    );`, (createErr) => {
+    );`, (createErr: Error | null) => {
       if (createErr) {
         reject(createErr);
         return;

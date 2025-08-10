@@ -25,10 +25,15 @@ async function getKeys() {
   return { googleKey, mapboxKey };
 }
 
-function filterByCity(results: string[], city: string) {
+function filterByCity(results: any[], city: string) {
   if (!city) return results;
   // 只保留包含城市名的结果（忽略大小写）
-  return results.filter(addr => addr.toLowerCase().includes(city.toLowerCase()));
+  return results.filter(addr => {
+    if (typeof addr.address === 'string') {
+      return addr.address.toLowerCase().includes(city.toLowerCase());
+    }
+    return false;
+  });
 }
 
 export async function GET(req: NextRequest) {
@@ -58,7 +63,7 @@ export async function GET(req: NextRequest) {
       }
       const data = await response.json();
       if (data && data.display_name) {
-        return NextResponse.json([data.display_name]);
+        return NextResponse.json([{ address: data.display_name, lat: lat, lng: lng }]);
       } else {
         return NextResponse.json([]);
       }
@@ -114,7 +119,10 @@ export async function GET(req: NextRequest) {
             .map((s: any) => {
               const main = s.placePrediction?.structuredFormat?.mainText?.text || '';
               const sec = s.placePrediction?.structuredFormat?.secondaryText?.text || '';
-              return sec ? `${main}, ${sec}` : main;
+              const lat = s.placePrediction?.geometry?.location?.latitude;
+              const lng = s.placePrediction?.geometry?.location?.longitude;
+              const address = sec ? `${main}, ${sec}` : main;
+              return { address, lat, lng };
             });
           results = filterByCity(results, city);
           if (results.length > 0) {
@@ -139,7 +147,7 @@ export async function GET(req: NextRequest) {
   let mapboxFailed = false;
   if (googleFailed && mapboxKey) {
     try {
-      const mapboxUrl = `https://api.mapbox.com/search/searchbox/v1/suggest?q=${encodeURIComponent(q)}&access_token=${mapboxKey}&language=zh`;
+      const mapboxUrl = `https://api.mapbox.com/search/searchbox/v1/suggest?q=${encodeURIComponent(q)}&access_token=${mapboxKey}&language=${languageParam}`;
       console.log('[Mapbox] 请求:', { url: mapboxUrl });
       const mapboxRes = await fetch(mapboxUrl);
       const data = await mapboxRes.json();
@@ -148,7 +156,10 @@ export async function GET(req: NextRequest) {
         if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
           let results = data.suggestions.map((s: any) => {
             let context = s.context ? s.context.map((c: any) => c.name).join(', ') : '';
-            return context ? `${s.name}, ${context}` : s.name;
+            const address = context ? `${s.name}, ${context}` : s.name;
+            const lat = s.center?.lat || s.center?.[1];
+            const lng = s.center?.lng || s.center?.[0];
+            return { address, lat, lng };
           });
           results = filterByCity(results, city);
           if (results.length > 0) {
@@ -178,16 +189,20 @@ export async function GET(req: NextRequest) {
       const data = await geoRes.json();
       console.log('[geocoder.ca] 响应:', JSON.stringify(data));
       if (geoRes.ok) {
-        let results: string[] = [];
+        let results: any[] = [];
         if (Array.isArray(data.standard)) {
-          results = data.standard.map((item: any) => item.staddress && item.city ? `${item.staddress}, ${item.city}, ${item.prov || ''}` : item.location || '');
+          results = data.standard.map((item: any) => {
+            const address = item.staddress && item.city ? `${item.staddress}, ${item.city}, ${item.prov || ''}` : item.location || '';
+            const lat = item.latt || null;
+            const lng = item.longt || null;
+            return { address, lat, lng };
+          });
         } else if (data.standard) {
           const item = data.standard;
-          if (item.staddress && item.city) {
-            results = [`${item.staddress}, ${item.city}, ${item.prov || ''}`];
-          } else if (item.location) {
-            results = [item.location];
-          }
+          const address = item.staddress && item.city ? `${item.staddress}, ${item.city}, ${item.prov || ''}` : item.location || '';
+          const lat = item.latt || null;
+          const lng = item.longt || null;
+          results = [{ address, lat, lng }];
         }
         results = filterByCity(results, city);
         if (results.length > 0) {

@@ -66,6 +66,9 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
     )
   }
 
+  // Defensive: always use an array
+  const safeRestrooms = Array.isArray(restrooms) ? restrooms : []
+
   return (
     <motion.div
       drag="y"
@@ -89,8 +92,8 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
         </button>
       </div>
       <div className="overflow-y-auto px-4 flex-grow pb-4">
-        {restrooms.length === 0 && <p className="text-gray-400 text-center">No restrooms found nearby.</p>}
-        {restrooms.map((restroom, index) => (
+        {safeRestrooms.length === 0 && <p className="text-gray-400 text-center">No restrooms found nearby.</p>}
+        {safeRestrooms.map((restroom, index) => (
           <div
             key={restroom.id}
             onClick={() => onRestroomSelect(restroom)}

@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { useEffect, useState, useRef } from "react"
 import StopsView from "./components/StopsView"
 import RestroomView, { Restroom } from "./components/RestroomView"
@@ -35,7 +36,6 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import "leaflet/dist/leaflet.css"
 import { useTranslations } from "next-intl"
 import { useRouter } from "next/navigation"
-import Head from "next/head"
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false }) 
 
@@ -108,6 +108,35 @@ export default function TransitApp() {
   const [editingAddressType, setEditingAddressType] = useState<"home" | "work" | null>(null);
   const [addressSearchInput, setAddressSearchInput] = useState("");
   const [addressSearchResults, setAddressSearchResults] = useState<any[]>([]);
+  // New state for selected address and nearby routes on search tab
+  const [selectedAddress, setSelectedAddress] = useState<{ address: string; lat: number | null; lng: number | null } | null>(null);
+  const [nearbyRoutes, setNearbyRoutes] = useState<any[]>([]);
+  // Add state to control visibility of selected address panel
+  const [showSelectedAddressPanel, setShowSelectedAddressPanel] = useState(false);
+
+  useEffect(() => {
+    console.log('[State] showSelectedAddressPanel changed:', showSelectedAddressPanel);
+  }, [showSelectedAddressPanel]);
+
+  useEffect(() => {
+    console.log('[State] selectedAddress changed:', selectedAddress);
+  }, [selectedAddress]);
+
+  useEffect(() => {
+    console.log('[State] selectedAddress changed:', selectedAddress);
+  }, [selectedAddress]);
+
+  useEffect(() => {
+    if (showSelectedAddressPanel) {
+      console.log('[State] showSelectedAddressPanel is true, panel should be visible');
+    } else {
+      console.log('[State] showSelectedAddressPanel is false, panel should be hidden');
+    }
+  }, [showSelectedAddressPanel]);
+
+  useEffect(() => {
+    console.log('[State] activeTab changed:', activeTab);
+  }, [activeTab]);
 
   // Add a safe getter for addressSearchResults length
   const addressSearchResultsLength = Array.isArray(addressSearchResults) ? addressSearchResults.length : 0;
@@ -171,6 +200,7 @@ export default function TransitApp() {
   useEffect(() => {
     if (!userLocation) {
       setCurrentAddressName(null);
+      console.log('[ReverseGeocode] userLocation is null, cleared currentAddressName');
       return;
     }
     const fetchAddressName = async () => {
@@ -185,8 +215,9 @@ export default function TransitApp() {
         const data = await response.json();
         console.log('[ReverseGeocode] Response data:', data);
         if (data && Array.isArray(data) && data.length > 0) {
-          setCurrentAddressName(data[0]);
-          console.log('[ReverseGeocode] Set currentAddressName:', data[0]);
+          // data[0] is now an object with address, lat, lng
+          setCurrentAddressName(data[0].address || null);
+          console.log('[ReverseGeocode] Set currentAddressName:', data[0].address);
         } else {
           setCurrentAddressName(null);
           console.log('[ReverseGeocode] No address found, set currentAddressName to null');
@@ -309,6 +340,9 @@ export default function TransitApp() {
       const limitedAddresses = Array.isArray(addresses) ? addresses.slice(0, 10) : [];
       const limitedStops = Array.isArray(stops) ? stops.slice(0, 10) : [];
 
+      // Map address objects to strings for rendering
+      const addressStrings = limitedAddresses.map((addr: any) => addr.address || '');
+
       // Normalize stops to match search result format
       const stopsFormatted = limitedStops.map((stop: any) => ({
         stop_id: stop.stop_id,
@@ -318,11 +352,11 @@ export default function TransitApp() {
         stop_lon: stop.stop_lon,
       }));
 
-      // Combine all results: routes, addresses, stops
+      // Combine all results: routes, addresses (strings), stops
       // Sort order: route, address, stop
       const combinedResults = [
         ...limitedRoutes,
-        ...limitedAddresses,
+        ...addressStrings,
         ...stopsFormatted,
       ];
 
@@ -432,6 +466,7 @@ export default function TransitApp() {
 
     return (
       <motion.div
+        key={currentAddressName}
         drag="y"
         onDragEnd={handleDragEnd}
         animate={controls}
@@ -446,7 +481,7 @@ export default function TransitApp() {
             <div className="flex items-center gap-2 text-white text-lg font-semibold">
               <MapPin className="w-5 h-5" />
               <span className="text-sm text-gray-400 mr-2">Current Location:</span>
-              <span className="font-normal">{currentAddressName ? currentAddressName : t('whereToPlaceholder')}</span>
+          <span className="font-normal">{currentAddressName ?? t('whereToPlaceholder')}</span>
             </div>
           </div>
           <hr className="border-t border-gray-600 mx-4" />
@@ -584,13 +619,13 @@ export default function TransitApp() {
                 />
                 <div className="max-h-40 overflow-auto bg-gray-800 rounded-md border border-gray-700">
                   {addressSearchResultsLength > 0 ? (
-                    addressSearchResults.map((addr) => (
+                    addressSearchResults.map((addr, index) => (
                       <div
-                        key={addr}
+                        key={index}
                         className="p-2 cursor-pointer hover:bg-green-700 text-white"
                         onClick={() => handleAddressSelect(addr)}
                       >
-                        {addr}
+                        {typeof addr === 'string' ? addr : JSON.stringify(addr)}
                       </div>
                     ))
                   ) : (
@@ -799,243 +834,310 @@ export default function TransitApp() {
   }, [activeTab]);
 
   return (
-    <div className="max-w-md mx-auto bg-gray-900 h-screen flex flex-col">
-      {/* Move Head outside the return to the top-level of the component */}
-      {typeof window !== "undefined" && (
-        <Head>
-          <title>Gobus Canada</title>
-        </Head>
-      )}
-      <div className="relative flex-1">
-        {userLocation ? (
-          <MapView
-            ref={mapRef}
-            userLocation={userLocation}
-            routePolyline={isStopsViewOpen ? routePolyline : []}
-            restrooms={restrooms}  // pass full restroom objects including address
-            selectedRestroomId={selectedRestroomId}
-          />
-        ) : (
+      <div className="max-w-md mx-auto bg-gray-900 h-screen flex flex-col">
+        {/* Move Head outside the return to the top-level of the component */}
+        <div className="relative flex-1">
+          {userLocation ? (
+            <MapView
+              ref={mapRef}
+              userLocation={userLocation}
+              routePolyline={isStopsViewOpen ? routePolyline : []}
+              restrooms={restrooms} // pass full restroom objects including address
+              selectedRestroomId={selectedRestroomId}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-400">{t('loadingMap')}</div>
+          )}
 
-          <div className="flex items-center justify-center h-full text-gray-400">{t('loadingMap')}</div>
-        )}
+          <div className="absolute top-4 right-4 z-10 pointer-events-auto">
+            <button
+              className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-[#3DDC97] focus:outline-none"
+              onClick={handleRecenter}
+              aria-label="回到当前位置"
+            >
+              <MapPin className="w-6 h-6 text-[#3DDC97]" />
+            </button>
+          </div>
 
-        <div className="absolute top-4 right-4 z-10 pointer-events-auto">
-          <button
-            className="w-12 h-12 bg-[#23272F] rounded-full flex items-center justify-center border-2 border-[#3DDC97] focus:outline-none"
-            onClick={handleRecenter}
-            aria-label="回到当前位置"
-          >
-            <MapPin className="w-6 h-6 text-[#3DDC97]" />
-          </button>
-        </div>
-        
-        {activeTab === 'search' && (
-          <div className="absolute top-4 left-4 right-20 z-20">
-            <div className="rounded-2xl bg-[#1E2228] shadow-lg flex items-center px-4 py-3 border border-[#23272F]">
-              <Search className="w-6 h-6 text-[#3DDC97] mr-2" />
-              <input
-                className="flex-1 bg-transparent outline-none text-lg text-white placeholder-[#A0AEC0]"
-                placeholder={t('searchAddress')}
-                value={searchInput}
-                onChange={handleSearchInput}
-                autoFocus
-              />
-            </div>
-            {(searchInput.length > 0 /* always show results if input */) && (
-              <div className="mt-2 max-h-60 overflow-auto bg-gray-800 rounded-md border border-gray-700">
-            {searchResults && searchResults.length > 0 ? (
-              searchResults.map((result) => {
-                // Determine icon based on result type
-                let icon = null;
-                let label = '';
-            if (result.route_short_name) {
-              // Bus or train route
-              icon = <Bus className="w-5 h-5 text-[#3DDC97]" />;
-              label = `${result.route_short_name} - ${result.trip_headsign || result.route_long_name}`;
-            } else if (typeof result === 'string') {
-              // Address string
-              icon = <MapPin className="w-5 h-5 text-[#3DDC97]" />;
-              label = result;
-            } else if (result.stop_name) {
-              // Stop
-              icon = <CircleParking  className="w-5 h-5 text-[#3DDC97]" />;
-              //icon = <Image src="/images/bus-stop.svg" alt="Bus Stop" width={20} height={20} className="text-[#3DDC97]" />;
-              label = `${result.stop_code || ''} - ${result.stop_name}`;
-            }
-                return (
-              <div
-                key={result.route_id || result.stop_id || label}
-                className="p-2 cursor-pointer hover:bg-green-700 text-white flex items-center gap-2"
-                onClick={async () => {
-                  if (result.route_id) {
-                    // Bus route selected
-                    setSelectedRoute(result);
-                    setIsStopsViewOpen(true);
-                    // Keep activeTab as 'search' for bus route per requirements
-                    // setActiveTab('home');
-                    setSearchInput('');
-                    setSearchResults([]);
-                  } else if (typeof result === 'string') {
-                  // Address selected
-                  // Move map center to address location (requires geocoding)
-                  if (typeof result === 'string') {
-                    // Since addressSearchResults are strings, we need to geocode the address to get coordinates
-                    try {
-                      const geocodeRes = await fetch(`/api/proxy-nominatim?q=${encodeURIComponent(result)}`);
-                      if (geocodeRes.ok) {
-                        const geocodeData = await geocodeRes.json();
-                        if (Array.isArray(geocodeData) && geocodeData.length > 0) {
-                          // Assuming geocodeData[0] contains lat and lon properties
-                          const firstResult = geocodeData[0];
-                          if (firstResult && firstResult.lat && firstResult.lon) {
-                            setUserLocation({ lat: parseFloat(firstResult.lat), lng: parseFloat(firstResult.lon) });
-                          }
-                        }
+          {activeTab === 'search' && (
+            <div className="absolute top-4 left-4 right-20 z-20">
+              <div className="rounded-2xl bg-[#1E2228] shadow-lg flex items-center px-4 py-3 border border-[#23272F]">
+                <Search className="w-6 h-6 text-[#3DDC97] mr-2" />
+                <input
+                  className="flex-1 bg-transparent outline-none text-lg text-white placeholder-[#A0AEC0]"
+                  placeholder={t('searchAddress')}
+                  value={searchInput}
+                  onChange={handleSearchInput}
+                  autoFocus
+                />
+              </div>
+              {(searchInput.length > 0 /* always show results if input */) && (
+                <div className="mt-2 max-h-60 overflow-auto bg-gray-800 rounded-md border border-gray-700">
+                  {searchResults && searchResults.length > 0 ? (
+                    searchResults.map((result, index) => {
+                      // Determine icon based on result type
+                      let icon = null
+                      let label = ''
+                      let key = ''
+                      console.log('[SearchResult] result:', result)
+                      if (result.route_id) {
+                        // Bus route
+                        icon = <Bus className="w-5 h-5 text-[#3DDC97]" />
+                        label = `${result.route_short_name} - ${result.route_long_name}`
+                        key = result.route_id && result.route_id !== '' ? String(result.route_id) : `route-${index}`
+                      } else if (typeof result === 'string') {
+                        // Address string
+                        icon = <MapPin className="w-5 h-5 text-[#3DDC97]" />
+                        label = result
+                        // Use index to ensure unique key for addresses
+                        key = result && result !== '' ? `${result}-${index}` : `address-${index}`
+                      } else if (result.stop_name) {
+                        // Stop
+                        icon = <CircleParking className="w-5 h-5 text-[#3DDC97]" />
+                        //icon = <Image src="/images/bus-stop.svg" alt="Bus Stop" width={20} height={20} className="text-[#3DDC97]" />
+                        label = `${result.stop_code || ''} - ${result.stop_name}`
+                        key = result.stop_id && result.stop_id !== '' ? String(result.stop_id) : `stop-${index}`
                       }
-                    } catch (error) {
-                      console.error('Failed to geocode address:', error);
-                    }
-                  }
-                  setAddressSearchInput('');
-                  setAddressSearchResults([]);
-                  setActiveTab('home');
-                  setSearchInput('');
-                  setSearchResults([]);
-                  } else if (result.stop_id) {
-                    // Stop selected
-                    // Show stop details and routes in draggable panel
-                    try {
-                      // Fetch routes serving this stop
-                      const res = await fetch(`/api/gtfs/stops/${result.stop_id}/routes`);
-                      const routesData = res.ok ? await res.json() : [];
-                      setStopInfo({
-                        stop: {
-                          stop_id: result.stop_id,
-                          stop_name: result.stop_name,
-                          stop_address: result.stop_address || '',
-                        },
-                        routes: Array.isArray(routesData) ? routesData : [],
-                      });
-                      setShowStopInfoPanel(true);
-                    } catch (error) {
-                      console.error('Failed to fetch routes for stop:', error);
-                      setStopInfo({
-                        stop: {
-                          stop_id: result.stop_id,
-                          stop_name: result.stop_name,
-                          stop_address: result.stop_address || '',
-                        },
-                        routes: [],
-                      });
-                      setShowStopInfoPanel(true);
-                    }
-                    setActiveTab('home');
-                    setSearchInput('');
-                    setSearchResults([]);
-                  }
-                }}
-              >
-                {icon}
-                <span>{label}</span>
-              </div>
-                );
-              })
-            ) : (
-              <div className="p-2 text-gray-400">{t('noResults')}</div>
-            )}
-              </div>
-            )}
-          </div>
-        )}
+                      return (
+                        <div
+                          key={key}
+                          className="p-2 cursor-pointer hover:bg-green-700 text-white flex items-center gap-2"
+                          onClick={async () => {
+                            if (result.route_id) {
+                              // Bus route selected
+                              setSelectedRoute(result)
+                              setIsStopsViewOpen(true)
+                              // Keep activeTab as 'search' for bus route per requirements
+                              // setActiveTab('home');
+                              setSearchInput('')
+                              setSearchResults([])
+                            } else if (typeof result === 'string') {
+                              console.log('[SearchResult] Address clicked:', result)
+                              // Address selected
+                              // Move map center to address location (requires geocoding)
+                              try {
+                                const geocodeRes = await fetch(`/api/proxy-nominatim?q=${encodeURIComponent(result)}`)
+                                if (!geocodeRes.ok) throw new Error('Failed to geocode address')
+                                const geocodeData = await geocodeRes.json()
+                                if (!Array.isArray(geocodeData) || geocodeData.length === 0) throw new Error('No geocode results')
+                                const firstResult = geocodeData[0]
+                                if (!firstResult.lat || !firstResult.lng) {
+                                  throw new Error('Invalid geocode result')
+                                }
+                                const lat = parseFloat(firstResult.lat)
+                                const lng = parseFloat(firstResult.lng)
+                                if (isNaN(lat) || isNaN(lng)) {
+                                  throw new Error('Geocode lat/lng is NaN')
+                                }
+                                setUserLocation({ lat, lng })
+                                setSelectedAddress({
+                                  address: firstResult.address,
+                                  lat,
+                                  lng,
+                                })
+                                // Fetch nearby routes for this location
+                                const nearbyRes = await fetch(`/api/gtfs/route/nearby?lat=${lat}&lng=${lng}`)
+                                const nearbyRoutes = nearbyRes.ok ? await nearbyRes.json() : []
+                                setNearbyRoutes(Array.isArray(nearbyRoutes) ? nearbyRoutes : [])
+                                setShowSelectedAddressPanel(true)
+                                if (activeTab !== 'search') {
+                                  setActiveTab('search')
+                                }
+                                setAddressSearchInput('')
+                                setAddressSearchResults([])
+                                setSearchInput('')
+                                setSearchResults([])
+                                console.log('[SearchResult] Selected address and nearby routes set, panel shown')
+                              } catch (error) {
+                                console.error('Failed to fetch nearby routes for address:', error)
+                                setSelectedAddress({
+                                  address: result,
+                                  lat: null,
+                                  lng: null,
+                                })
+                                setNearbyRoutes([])
+                                setShowSelectedAddressPanel(true)
+                                if (activeTab !== 'search') {
+                                  setActiveTab('search')
+                                }
+                                setAddressSearchInput('')
+                                setAddressSearchResults([])
+                                setSearchInput('')
+                                setSearchResults([])
+                                console.log('[SearchResult] Show selected address panel set to true on error')
+                              }
+                            } else if (result.stop_id) {
+                              // Stop selected
+                              // Show stop details and routes in draggable panel
+                              try {
+                                // Fetch routes serving this stop
+                                const res = await fetch(`/api/gtfs/stops/${result.stop_id}/routes`)
+                                const routesData = res.ok ? await res.json() : []
+                                setStopInfo({
+                                  stop: {
+                                    stop_id: result.stop_id,
+                                    stop_name: result.stop_name,
+                                    stop_address: result.stop_address || '',
+                                  },
+                                  routes: Array.isArray(routesData) ? routesData : [],
+                                })
+                                setShowStopInfoPanel(true)
+                              } catch (error) {
+                                console.error('Failed to fetch routes for stop:', error)
+                                setStopInfo({
+                                  stop: {
+                                    stop_id: result.stop_id,
+                                    stop_name: result.stop_name,
+                                    stop_address: result.stop_address || '',
+                                  },
+                                  routes: [],
+                                })
+                                setShowStopInfoPanel(true)
+                              }
+                              setActiveTab('home')
+                              setSearchInput('')
+                              setSearchResults([])
+                            }
+                          }}
+                        >
+                          {icon}
+                          <span>{label}</span>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <div className="p-2 text-gray-400">{t('noResults')}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-        {activeTab === 'home' && !isStopsViewOpen && renderHomeSheet()}
+          {activeTab === 'home' && !isStopsViewOpen && renderHomeSheet()}
+          {activeTab === 'search' && selectedAddress && showSelectedAddressPanel && (
+            <motion.div
+              drag="y"
+              dragConstraints={{ top: 0, bottom: typeof window !== 'undefined' ? window.innerHeight : 900 }}
+              dragElastic={{ top: 0.05, bottom: 0.05 }}
+              className="absolute top-0 left-0 right-0 h-full bg-[#23272F] rounded-t-2xl shadow-2xl flex flex-col z-20"
+              style={{ touchAction: 'none' }}
+            >
+              <div className="p-4 flex-shrink-0 cursor-grab active:cursor-grabbing">
+                <div className="w-12 h-1.5 bg-gray-600 rounded-full mx-auto mb-2" />
+                <div className="flex items-center gap-2 text-white text-lg font-semibold">
+                  <MapPin className="w-5 h-5" />
+                  <span className="text-sm text-gray-400 mr-2">Selected Address:</span>
+                  <span className="font-normal">{selectedAddress.address}</span>
+                </div>
+              </div>
+              <hr className="border-t border-gray-600 mx-4" />
+              <div className="overflow-y-auto px-4 flex-grow pb-4">
+                {(nearbyRoutes.length === 0 || selectedAddress?.lat === null || selectedAddress?.lng === null) ? (
+                  <div className="text-gray-400 p-2">No nearby routes found.</div>
+                ) : (
+                  nearbyRoutes.map((route) => (
+                    <Card key={route.route_id} className="bg-[#23272F] border border-[#23272F] shadow-md cursor-pointer mb-2"
+                      onClick={() => {
+                        setSelectedRoute(route)
+                        setIsStopsViewOpen(true)
+                      }}
+                    >
+                      <CardContent className="p-4 flex items-center gap-4">
+                        <Bus className="w-5 h-5 text-[#3DDC97]" />
+                        <div className="font-bold text-[#3DDC97]">{route.route_short_name}</div>
+                        <div className="text-white">{route.trip_headsign}</div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
 
-        {activeTab === 'favorite' && userLocation && Array.isArray(restrooms) && restrooms.filter(r => r && typeof r === 'object').length > 0 && (
-          <RestroomView
-            restrooms={restrooms.filter(r => r && typeof r === 'object')}
-            loading={loadingRestrooms}
-            error={restroomError}
-            onRestroomSelect={handleRestroomSelect}
+          {activeTab === 'favorite' && userLocation && Array.isArray(restrooms) && restrooms.filter(r => r && typeof r === 'object').length > 0 && (
+            <RestroomView
+              restrooms={restrooms.filter(r => r && typeof r === 'object')}
+              loading={loadingRestrooms}
+              error={restroomError}
+              onRestroomSelect={handleRestroomSelect}
+            />
+          )}
+          {activeTab === 'favorite' && userLocation && (!Array.isArray(restrooms) || restrooms.filter(r => r && typeof r === 'object').length === 0) && (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              {loadingRestrooms ? t('loadingMap') : t('noResults')}
+            </div>
+          )}
+
+        </div>
+
+        {isStopsViewOpen && (
+          <StopsView
+            selectedRoute={selectedRoute}
+            routePolyline={routePolyline}
+            userLocation={userLocation}
+            loadingStops={loadingStops}
+            onRecenter={handleRecenter}
+            onDirectionChange={handleDirectionChange}
+            onBack={() => setIsStopsViewOpen(false)}
           />
         )}
-        {activeTab === 'favorite' && userLocation && (!Array.isArray(restrooms) || restrooms.filter(r => r && typeof r === 'object').length === 0) && (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            {loadingRestrooms ? t('loadingMap') : t('noResults')}
+
+        {activeTab === 'settings' && renderSettingsView()}
+
+        <footer className="w-full max-w-md mx-auto bg-[#23272F] border-t border-gray-700 z-30">
+          <div className="flex justify-around p-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setActiveTab('home')
+                setIsStopsViewOpen(false)
+              }}
+              className={`rounded-full ${activeTab === 'home' ? 'text-[#3DDC97]' : 'text-gray-400'}`}
+            >
+              <Home className="w-6 h-6" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setActiveTab('search')
+                setIsStopsViewOpen(false)
+              }}
+              className={`rounded-full ${activeTab === 'search' ? 'text-[#3DDC97]' : 'text-gray-400'}`}
+            >
+              <Search className="w-6 h-6" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                if (activeTab === 'favorite') {
+                  setActiveTab('home')
+                  setIsStopsViewOpen(false)
+                } else {
+                  setActiveTab('favorite')
+                  setIsStopsViewOpen(false)
+                }
+              }}
+              className={`rounded-full ${activeTab === 'favorite' ? 'text-[#3DDC97]' : 'text-gray-400'}`}
+            >
+              <Heart className="w-6 h-6" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setActiveTab('settings')
+                setIsStopsViewOpen(false)
+              }}
+              className={`rounded-full ${activeTab === 'settings' ? 'text-[#3DDC97]' : 'text-gray-400'}`}
+            >
+              <Settings className="w-6 h-6" />
+            </Button>
           </div>
-        )}
-
+        </footer>
       </div>
-
-
-      {isStopsViewOpen && (
-        <StopsView
-          selectedRoute={selectedRoute}
-          routePolyline={routePolyline}
-          userLocation={userLocation}
-          loadingStops={loadingStops}
-          onRecenter={handleRecenter}
-          onDirectionChange={handleDirectionChange}
-          onBack={() => setIsStopsViewOpen(false)}
-        />
-      )}
-
-      {activeTab === "settings" && renderSettingsView()}
-
-      <footer className="w-full max-w-md mx-auto bg-[#23272F] border-t border-gray-700 z-30">
-        <div className="flex justify-around p-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              setActiveTab("home");
-              setIsStopsViewOpen(false);
-            }}
-            className={`rounded-full ${activeTab === "home" ? "text-[#3DDC97]" : "text-gray-400"}`}
-          >
-            <Home className="w-6 h-6" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              setActiveTab("search");
-              setIsStopsViewOpen(false);
-            }}
-            className={`rounded-full ${activeTab === "search" ? "text-[#3DDC97]" : "text-gray-400"}`}
-          >
-            <Search className="w-6 h-6" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              if (activeTab === 'favorite') {
-                setActiveTab('home');
-                setIsStopsViewOpen(false);
-              } else {
-                setActiveTab('favorite');
-                setIsStopsViewOpen(false);
-              }
-            }}
-            className={`rounded-full ${activeTab === 'favorite' ? "text-[#3DDC97]" : "text-gray-400"}`}
-          >
-            <Heart className="w-6 h-6" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              setActiveTab("settings");
-              setIsStopsViewOpen(false);
-            }}
-            className={`rounded-full ${activeTab === "settings" ? "text-[#3DDC97]" : "text-gray-400"}`}
-          >
-            <Settings className="w-6 h-6" />
-          </Button>
-        </div>
-      </footer>
-    </div>
+    
   )
 }
-
