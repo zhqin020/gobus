@@ -23,31 +23,19 @@ interface RestroomViewProps {
 
 export default function RestroomView({ restrooms, loading, error, onRestroomSelect, onClose }: RestroomViewProps) {
   const controls = useAnimation()
-  const [panelPositions, setPanelPositions] = useState({ top: 100, middle: 500, bottom: 800 })
-
-  // Set panel positions dynamically on mount
+  // 设置默认停靠在屏幕中间
   useEffect(() => {
     if (typeof window !== "undefined") {
       const middle = window.innerHeight * 0.6
-      setPanelPositions({ top: 100, middle, bottom: window.innerHeight - 140 })
       controls.start({ y: middle })
     }
   }, [controls])
 
   const onDragEnd = (event: any, info: any) => {
-    const { point, velocity } = info
+    const { point } = info
     const currentY = point.y
-    const { top, middle, bottom } = panelPositions
-    if (Math.abs(velocity.y) > 300) {
-      controls.start({ y: velocity.y < 0 ? top : bottom })
-    } else {
-      const diffTop = Math.abs(currentY - top)
-      const diffMiddle = Math.abs(currentY - middle)
-      const diffBottom = Math.abs(currentY - bottom)
-      if (diffTop < diffMiddle && diffTop < diffBottom) controls.start({ y: top })
-      else if (diffMiddle < diffTop && diffMiddle < diffBottom) controls.start({ y: middle })
-      else controls.start({ y: bottom })
-    }
+    // 允许在任意位置停靠
+    controls.start({ y: currentY })
   }
 
   if (loading) {

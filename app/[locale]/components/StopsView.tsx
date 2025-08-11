@@ -77,16 +77,15 @@ export default function StopsView({
   const [currentDirectionIndex, setCurrentDirectionIndex] = useState(0)
   const [transferLines, setTransferLines] = useState<Record<string, TransferData>>({});
   const controls = useAnimation()
-  const [panelPositions, setPanelPositions] = useState({ top: 100, middle: 500, bottom: 800 })
 
   const currentDirection = selectedRoute?.directions?.[currentDirectionIndex]
   const stops = currentDirection?.stops ?? []
 
   // --- Effects ---
+  // 设置默认停靠在屏幕中间
   useEffect(() => {
     if (typeof window !== "undefined") {
       const middle = window.innerHeight * 0.6
-      setPanelPositions({ top: 100, middle, bottom: window.innerHeight - 140 })
       controls.start({ y: middle })
     }
   }, [controls])
@@ -128,19 +127,10 @@ export default function StopsView({
 
   // --- Event Handlers ---
   const onDragEnd = (event: any, info: any) => {
-    const { point, velocity } = info
+    const { point } = info
     const currentY = point.y
-    const { top, middle, bottom } = panelPositions
-    if (Math.abs(velocity.y) > 300) {
-      controls.start({ y: velocity.y < 0 ? top : bottom })
-    } else {
-      const diffTop = Math.abs(currentY - top)
-      const diffMiddle = Math.abs(currentY - middle)
-      const diffBottom = Math.abs(currentY - bottom)
-      if (diffTop < diffMiddle && diffTop < diffBottom) controls.start({ y: top })
-      else if (diffMiddle < diffTop && diffMiddle < diffBottom) controls.start({ y: middle })
-      else controls.start({ y: bottom })
-    }
+    // 允许在任意位置停靠
+    controls.start({ y: currentY })
   }
 
   // --- Render Logic ---
@@ -196,7 +186,7 @@ export default function StopsView({
         dragConstraints={{ top: 0, bottom: typeof window !== "undefined" ? window.innerHeight : 900 }}
         dragElastic={{ top: 0.05, bottom: 0.05 }}
       className="absolute left-0 right-0 bg-[#23272F] rounded-t-2xl shadow-2xl flex flex-col z-10"
-      style={{ touchAction: "none", height: '60vh', top: panelPositions.middle }}
+      style={{ touchAction: "none", height: '60vh', top: "50%" }}
       >
         <div className="p-4 flex-shrink-0 text-center cursor-grab active:cursor-grabbing">
           <div className="w-12 h-1.5 bg-gray-600 rounded-full mx-auto mb-2" />

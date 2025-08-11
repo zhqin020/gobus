@@ -452,18 +452,15 @@ export default function TransitApp() {
     const handleDragEnd = (event: any, info: any) => {
       const { point, velocity } = info
       const currentY = point.y
-      const top = 100
-      const middle = window.innerHeight * 0.6
+      const top = 0 // 允许拖到屏幕顶部
+      const middle = window.innerHeight * 0.6 // 默认停靠在屏幕中间
       const bottom = window.innerHeight - 140
       if (Math.abs(velocity.y) > 300) {
+        // 速度过快时，根据方向停靠在顶部或底部
         controlsRef.current.start({ y: velocity.y < 0 ? top : bottom })
       } else {
-        const diffTop = Math.abs(currentY - top)
-        const diffMiddle = Math.abs(currentY - middle)
-        const diffBottom = Math.abs(currentY - bottom)
-        if (diffTop < diffMiddle && diffTop < diffBottom) controlsRef.current.start({ y: top })
-        else if (diffMiddle < diffTop && diffMiddle < diffBottom) controlsRef.current.start({ y: middle })
-        else controlsRef.current.start({ y: bottom })
+        // 允许面板停在任何位置
+        controlsRef.current.start({ y: currentY })
       }
     }
 
@@ -1020,6 +1017,7 @@ export default function TransitApp() {
           {activeTab === 'search' && selectedAddress && showSelectedAddressPanel && (
             <motion.div
               drag="y"
+              initial={{ y: typeof window !== 'undefined' ? window.innerHeight * 0.6 : 500 }} // 默认停靠在屏幕中间
               dragConstraints={{ top: 0, bottom: typeof window !== 'undefined' ? window.innerHeight : 900 }}
               dragElastic={{ top: 0.05, bottom: 0.05 }}
               className="absolute top-0 left-0 right-0 h-full bg-[#23272F] rounded-t-2xl shadow-2xl flex flex-col z-20"
