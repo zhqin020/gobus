@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Switch } from "@/components/ui/switch"
 import { motion, useAnimation } from "framer-motion"
 import { MapPin, Clock, Navigation } from "lucide-react"
 
@@ -11,6 +12,7 @@ export interface Restroom {
   lat: number
   lon: number
   tags: Record<string, any>
+  isCommercial?: boolean
 }
 
 interface RestroomViewProps {
@@ -22,6 +24,48 @@ interface RestroomViewProps {
 }
 
 export default function RestroomView({ restrooms, loading, error, onRestroomSelect, onClose }: RestroomViewProps) {
+  const [showBusinessRestrooms, setShowBusinessRestrooms] = useState(false)
+  // Defensive: always use an array - 移到useEffect之前
+  const safeRestrooms = Array.isArray(restrooms) ? restrooms : []
+
+  // 监听showBusinessRestrooms状态变化
+  useEffect(() => {
+    console.log('Show business restrooms:', showBusinessRestrooms)
+    console.log('Filtered restrooms count:', safeRestrooms.filter(restroom => !showBusinessRestrooms || isBusinessRestroom(restroom)).length)
+  }, [showBusinessRestrooms, safeRestrooms])
+
+  // 调试原始数据
+  useEffect(() => {
+    console.log('Total restrooms:', safeRestrooms.length)
+    // 显示前3个厕所的标签信息
+    safeRestrooms.slice(0, 3).forEach(restroom => {
+      console.log('Sample restroom tags:', restroom.tags)
+    })
+  }, [safeRestrooms])
+
+  // 判断是否为商业单位厕所
+  // 优先使用API返回的isCommercial字段，如果没有则使用标签匹配
+  const isBusinessRestroom = (restroom: Restroom) => {
+    // 如果API已经标记了isCommercial，则直接使用
+    if (restroom.isCommercial !== undefined) {
+      return restroom.isCommercial;
+    }
+    
+    // 回退方案：使用标签匹配
+    const businessTags = [
+      'mcdonalds', 'starbucks', 'dunkin', 'kfc', 'mall', 'shopping', 'restaurant',
+      'cafe', 'coffee', 'food', 'fast_food', 'hotel', 'retail', 'burger_king',
+      'wendys', 'subway', 'taco_bell', 'shop', 'commercial'
+    ];
+    const tags = Object.values(restroom.tags || {})
+      .map(tag => String(tag).toLowerCase())
+      .join(' ');
+    // 支持部分匹配和常见标签变体
+    return businessTags.some(tag =>
+      tags.includes(tag) ||
+      tags.match(new RegExp(`\b${tag.replace('_', '\s*')}\b`, 'i'))
+    );
+  }
   const controls = useAnimation()
   // 设置默认停靠在屏幕中间
   useEffect(() => {
@@ -54,9 +98,6 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
     )
   }
 
-  // Defensive: always use an array
-  const safeRestrooms = Array.isArray(restrooms) ? restrooms : []
-
   return (
     <motion.div
       drag="y"
@@ -70,6 +111,14 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
     >
       <div className="p-4 flex-shrink-0 text-center cursor-grab active:cursor-grabbing">
         <div className="w-12 h-1.5 bg-gray-600 rounded-full mx-auto mb-2" />
+        <div className="flex items-center justify-center mt-2 mb-1">
+          <span className="text-white text-sm mr-2">Show Business Restrooms</span>
+          <Switch
+            checked={showBusinessRestrooms}
+            onCheckedChange={setShowBusinessRestrooms}
+            className="data-[state=checked]:bg-blue-500"
+          />
+        </div>
         <div className="text-white text-lg font-semibold">Nearby Restrooms</div>
         <button
           onClick={onClose}
@@ -81,7 +130,11 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
       </div>
       <div className="overflow-y-auto px-4 flex-grow pb-4">
         {safeRestrooms.length === 0 && <p className="text-gray-400 text-center">No restrooms found nearby.</p>}
-        {safeRestrooms.map((restroom, index) => (
+        {showBusinessRestrooms && <p className="text-gray-400 text-center mb-2">Showing all restrooms</p>}
+        {!showBusinessRestrooms && <p className="text-gray-400 text-center mb-2">Showing only non-business restrooms</p>}
+        {safeRestrooms
+          .filter(restroom => showBusinessRestrooms || !isBusinessRestroom(restroom))
+          .map((restroom, index) => (
           <div
             key={restroom.id}
             onClick={() => onRestroomSelect(restroom)}
@@ -95,6 +148,13 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
                   <span>{String(value)}</span>
                 </div>
               ))}
+              {/* 显示是否为商业厕所 */}
+              <div className="mt-1 flex items-center gap-1">
+                <span className="font-mono text-xs text-gray-400">Business:</span>
+                <span className={restroom.isCommercial ? "text-green-400" : "text-red-400"}>
+                  {restroom.isCommercial ? "Yes" : "No"}
+                </span>
+              </div>
             </div>
             <div className="mt-3 pt-3 flex justify-between items-center text-xs">
               <div className="flex items-center text-gray-300">

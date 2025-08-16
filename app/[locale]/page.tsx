@@ -1055,15 +1055,15 @@ export default function TransitApp() {
             </motion.div>
           )}
 
-          {activeTab === 'favorite' && userLocation && Array.isArray(restrooms) && restrooms.filter(r => r && typeof r === 'object').length > 0 && (
+          {activeTab === 'favorite' && userLocation && Array.isArray(restrooms) && restrooms.length > 0 && (
             <RestroomView
-              restrooms={restrooms.filter(r => r && typeof r === 'object')}
+              restrooms={restrooms}
               loading={loadingRestrooms}
               error={restroomError}
               onRestroomSelect={handleRestroomSelect}
             />
           )}
-          {activeTab === 'favorite' && userLocation && (!Array.isArray(restrooms) || restrooms.filter(r => r && typeof r === 'object').length === 0) && (
+          {activeTab === 'favorite' && userLocation && (!Array.isArray(restrooms) || restrooms.length === 0) && (
             <div className="flex items-center justify-center h-full text-gray-400">
               {loadingRestrooms ? t('loadingMap') : t('noResults')}
             </div>

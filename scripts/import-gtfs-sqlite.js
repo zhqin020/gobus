@@ -172,7 +172,8 @@ async function importAll() {
             lat REAL,
             lon REAL,
             distance REAL,
-            is_open INTEGER
+            is_open INTEGER,
+            is_commercial INTEGER
           );`, (err) => {
             if (err) reject(err);
             else resolve(null);
@@ -180,15 +181,16 @@ async function importAll() {
         });
 
         // Upsert restroom data
-        const upsertStmt = db.prepare(`INSERT INTO restrooms (id, name, address, lat, lon, distance, is_open)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+        const upsertStmt = db.prepare(`INSERT INTO restrooms (id, name, address, lat, lon, distance, is_open, is_commercial)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
             address=excluded.address,
             lat=excluded.lat,
             lon=excluded.lon,
             distance=excluded.distance,
-            is_open=excluded.is_open;`);
+            is_open=excluded.is_open,
+            is_commercial=excluded.is_commercial;`);
 
         db.serialize(() => {
           db.run('BEGIN TRANSACTION');
@@ -200,7 +202,8 @@ async function importAll() {
               restroom.lat,
               restroom.lon,
               restroom.distance,
-              restroom.is_open ? 1 : 0
+              restroom.is_open ? 1 : 0,
+              0 // Default value for is_commercial
             ]);
           }
           db.run('COMMIT');
