@@ -5,3 +5,4 @@
 2. 地址下面显示 tags, 用户可以了解洗手间的特点
 3. 删除 Closed 图标和lable, 改为导航 icon，可以 调用google map 程序进行导航
 4. 记录中间的分割线，应该在当前记录的 xxxkm away, 和 下一个Address 之间。目前在当前记录的 xxxkm away 的上方，导致视觉上容易混淆
+5. when set "show business restrooms" off,  no restroom shown in dragable panel, all public restroom should be listed in dragable panel.

@@ -24,7 +24,8 @@ const oneWeek = 7 * 24 * 60 * 60 * 1000;
 // 扩展的商业品牌列表
 const COMMERCIAL_BRANDS = [
   'mcdonalds', 'kfc', 'starbucks', 'dunkin', 'burger_king', 'wendys',
-  'subway', 'pizza_hut', 'dominos', 'taco_bell', 'chipotle', 'coffee_bucks'
+  'subway', 'pizza_hut', 'dominos', 'taco_bell', 'chipotle', 'coffee_bucks',
+  'superfresh', 'gourmet garage'
 ];
 
 // 从Public Bathrooms API获取数据
@@ -130,17 +131,16 @@ async function fetchPublicBathroomsAPI(lat: number, lng: number) {
       }
       
       // 标记是否为商业厕所
-    const isCommercial = COMMERCIAL_BRANDS.some(brand => 
+    const isCommercial = (COMMERCIAL_BRANDS.some(brand => 
       (restroom.name && restroom.name.toLowerCase().includes(brand)) ||
       (tags.brand && tags.brand.toLowerCase().includes(brand)) ||
-      (tags.name && tags.name.toLowerCase().includes(brand)) ||
+      (tags.name && tags.name.toLowerCase().includes(brand)))) ||
       (tags.amenity === 'restaurant') ||
       (tags.amenity === 'fast_food') ||
       (tags.amenity === 'cafe') ||
       (tags.shop === 'mall') ||
       (tags.shop === 'supermarket') ||
-      (tags.shop === 'department_store')
-    );
+      (tags.shop === 'department_store');
     return {
       id: `pb_${restroom.id}`, // 添加前缀以避免ID冲突
       tags: tags,
@@ -160,7 +160,7 @@ async function fetchPublicBathroomsAPI(lat: number, lng: number) {
 async function fetchRestroomsFromPublicAPI(lat: number, lng: number) {
   // 优化的Overpass查询
     const overpassQuery = `[out:json][timeout:25];
-      // 基础公共厕所（放宽access限制）
+      // 基础公共厕所（所有类型的公共厕所）
       node["amenity"="toilets"]
         (around:5000,${lat},${lng});
       // 商业品牌厕所
@@ -169,16 +169,8 @@ async function fetchRestroomsFromPublicAPI(lat: number, lng: number) {
       // 商场和购物中心厕所
       node["amenity"="toilets"]["destination"~"mall|shopping|center"]
         (around:5000,${lat},${lng});
-      // 直接搜索商业场所（假设它们有厕所）
-      node["amenity"~"restaurant|fast_food|cafe"]["brand"~"${COMMERCIAL_BRANDS.join('|')}"]
-        (around:5000,${lat},${lng});
-      node["shop"~"mall|department_store|supermarket"]["name"~"${COMMERCIAL_BRANDS.join('|')}"]
-        (around:5000,${lat},${lng});
-      // 搜索特定品牌Superfresh和Gourmet Garage
-      node["name"~"Superfresh|Gourmet Garage"]
-        (around:5000,${lat},${lng});
-      // 搜索商业场所（不假设它们有厕所，但在后续处理中标记为商业厕所）
-      node["shop"~"mall|department_store|supermarket"]
+      // 搜索特定品牌Superfresh和Gourmet Garage的厕所
+      node["amenity"="toilets"]["name"~"Superfresh|Gourmet Garage"]
         (around:5000,${lat},${lng});
       out body;`;
 
@@ -287,16 +279,27 @@ async function fetchRestroomsFromPublicAPI(lat: number, lng: number) {
         }
 
         // 标记是否为商业厕所
-        const isCommercial = COMMERCIAL_BRANDS.some(brand => 
-          tags.brand?.toLowerCase().includes(brand) || 
-          tags.name?.toLowerCase().includes(brand) ||
-          tags.amenity === 'restaurant' ||
+        // 公共厕所(amenity=toilets)默认不是商业厕所，除非明确标记为商业品牌
+        let isCommercial = false;
+        
+        // 只有当厕所明确属于商业品牌或商业场所时才标记为商业厕所
+        // 对于amenity=toilets的元素，只检查是否属于商业品牌
+        if (tags.amenity === 'toilets') {
+          if (COMMERCIAL_BRANDS.some(brand => 
+            tags.brand?.toLowerCase().includes(brand) || 
+            tags.name?.toLowerCase().includes(brand))) {
+            isCommercial = true;
+          }
+        } 
+        // 对于非toilets的商业场所元素，标记为商业厕所
+        else if (tags.amenity === 'restaurant' ||
           tags.amenity === 'fast_food' ||
           tags.amenity === 'cafe' ||
           tags.shop === 'mall' ||
           tags.shop === 'supermarket' ||
-          tags.shop === 'department_store'
-        );
+          tags.shop === 'department_store') {
+          isCommercial = true;
+        }
 
         // 添加调试日志
         if (tags.name && (tags.name.includes('Superfresh') || tags.name.includes('Gourmet Garage'))) {

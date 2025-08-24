@@ -137,7 +137,8 @@ async function importAll() {
       console.log('[GTFS Import] Restroom data is expired or missing, updating...');
 
       // Fetch restroom data from public API and update database here
-      const fetch = require('node-fetch');
+      // Use dynamic import for node-fetch as it's an ES module
+      const { default: fetch } = await import('node-fetch');
 
       // Example: Fetch from Vancouver open data API
       const VANCOUVER_API = 'https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/public-washrooms/records?limit=100';
@@ -150,14 +151,17 @@ async function importAll() {
         const data = await response.json();
 
         // Parse and map data to restroom objects
-        const restrooms = data.records.map((record) => {
-          const fields = record.fields;
+        const restrooms = data.results.map((record) => {
+          // Extract coordinates from geo_point_2d
+          const lat = record.geo_point_2d?.lat || 0;
+          const lon = record.geo_point_2d?.lon || 0;
+          
           return {
-            id: record.recordid,
-            name: fields.name || '',
-            address: fields.address || '',
-            lat: fields.latitude,
-            lon: fields.longitude,
+            id: `vancouver_${lat}_${lon}`, // Create a unique ID
+            name: record.park_name || '',
+            address: record.location || '',
+            lat: lat,
+            lon: lon,
             distance: null, // to be calculated on query
             is_open: true, // assume true or parse if available
           };

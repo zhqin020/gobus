@@ -16,56 +16,28 @@ export interface Restroom {
 }
 
 interface RestroomViewProps {
-  restrooms: Restroom[]
-  loading: boolean
-  error: string | null
-  onRestroomSelect: (restroom: Restroom) => void
-  onClose?: () => void
+  restrooms: Restroom[];
+  loading: boolean;
+  error: string | null;
+  onRestroomSelect: (restroom: Restroom) => void;
+  onClose: () => void;
+  showBusinessRestrooms: boolean;
+  setShowBusinessRestrooms: (show: boolean) => void;
 }
 
-export default function RestroomView({ restrooms, loading, error, onRestroomSelect, onClose }: RestroomViewProps) {
-  const [showBusinessRestrooms, setShowBusinessRestrooms] = useState(false)
+export default function RestroomView({ restrooms, loading, error, onRestroomSelect, onClose, showBusinessRestrooms, setShowBusinessRestrooms }: RestroomViewProps) {
+  // 使用从props传入的状态和setter
   // Defensive: always use an array - 移到useEffect之前
   const safeRestrooms = Array.isArray(restrooms) ? restrooms : []
-
-  // 监听showBusinessRestrooms状态变化
-  useEffect(() => {
-    console.log('Show business restrooms:', showBusinessRestrooms)
-    console.log('Filtered restrooms count:', safeRestrooms.filter(restroom => !showBusinessRestrooms || isBusinessRestroom(restroom)).length)
-  }, [showBusinessRestrooms, safeRestrooms])
 
   // 调试原始数据
   useEffect(() => {
     console.log('Total restrooms:', safeRestrooms.length)
     // 显示前3个厕所的标签信息
     safeRestrooms.slice(0, 3).forEach(restroom => {
-      console.log('Sample restroom tags:', restroom.tags)
+      console.log('Sample restroom tags:', restroom.tags || 'No tags available')
     })
   }, [safeRestrooms])
-
-  // 判断是否为商业单位厕所
-  // 优先使用API返回的isCommercial字段，如果没有则使用标签匹配
-  const isBusinessRestroom = (restroom: Restroom) => {
-    // 如果API已经标记了isCommercial，则直接使用
-    if (restroom.isCommercial !== undefined) {
-      return restroom.isCommercial;
-    }
-    
-    // 回退方案：使用标签匹配
-    const businessTags = [
-      'mcdonalds', 'starbucks', 'dunkin', 'kfc', 'mall', 'shopping', 'restaurant',
-      'cafe', 'coffee', 'food', 'fast_food', 'hotel', 'retail', 'burger_king',
-      'wendys', 'subway', 'taco_bell', 'shop', 'commercial'
-    ];
-    const tags = Object.values(restroom.tags || {})
-      .map(tag => String(tag).toLowerCase())
-      .join(' ');
-    // 支持部分匹配和常见标签变体
-    return businessTags.some(tag =>
-      tags.includes(tag) ||
-      tags.match(new RegExp(`\b${tag.replace('_', '\s*')}\b`, 'i'))
-    );
-  }
   const controls = useAnimation()
   // 设置默认停靠在屏幕中间
   useEffect(() => {
@@ -111,14 +83,6 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
     >
       <div className="p-4 flex-shrink-0 text-center cursor-grab active:cursor-grabbing">
         <div className="w-12 h-1.5 bg-gray-600 rounded-full mx-auto mb-2" />
-        <div className="flex items-center justify-center mt-2 mb-1">
-          <span className="text-white text-sm mr-2">Show Business Restrooms</span>
-          <Switch
-            checked={showBusinessRestrooms}
-            onCheckedChange={setShowBusinessRestrooms}
-            className="data-[state=checked]:bg-blue-500"
-          />
-        </div>
         <div className="text-white text-lg font-semibold">Nearby Restrooms</div>
         <button
           onClick={onClose}
@@ -128,61 +92,123 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
           ✕
         </button>
       </div>
+      <div className="px-4 py-2 flex items-center justify-between border-b border-gray-600">
+        <span className="text-white text-sm">显示商业场所厕所</span>
+        <Switch
+          checked={showBusinessRestrooms}
+          onCheckedChange={setShowBusinessRestrooms}
+        />
+      </div>
       <div className="overflow-y-auto px-4 flex-grow pb-4">
         {safeRestrooms.length === 0 && <p className="text-gray-400 text-center">No restrooms found nearby.</p>}
-        {showBusinessRestrooms && <p className="text-gray-400 text-center mb-2">Showing all restrooms</p>}
-        {!showBusinessRestrooms && <p className="text-gray-400 text-center mb-2">Showing only non-business restrooms</p>}
         {safeRestrooms
-          .filter(restroom => showBusinessRestrooms || !isBusinessRestroom(restroom))
+          .filter(restroom => {
+            // 添加调试日志
+            console.log('Filtering restroom:', restroom.id, restroom.address, restroom);
+            
+            // 确保标签存在，如果不存在则使用空对象
+            const tags = restroom.tags && typeof restroom.tags === 'object' ? restroom.tags : {};
+            
+            // 检查标签键名是否包含商业场所相关词汇
+            const hasBusinessTagInKeys = Object.keys(tags).some(key => 
+              [
+                'restaurant', 'cafe', 'hotel', 'shopping_mall', 'gas_station',
+                'convenience_store', 'pharmacy', 'bank', 'atm', 'hospital',
+                'library', 'museum', 'theater', 'cinema', 'bar', 'pub'
+              ].includes(String(key).toLowerCase())
+            );
+            
+            // 检查标签值是否包含商业场所相关词汇
+            const hasBusinessTagInValues = Object.values(tags).some(tag => 
+              [
+                'restaurant', 'cafe', 'hotel', 'shopping_mall', 'gas_station',
+                'convenience_store', 'pharmacy', 'bank', 'atm', 'hospital',
+                'library', 'museum', 'theater', 'cinema', 'bar', 'pub'
+              ].includes(String(tag).toLowerCase())
+            );
+            
+            // 检查标签键名是否包含公共厕所相关词汇
+            const hasPublicTagInKeys = Object.keys(tags).some(key => 
+              [
+                'toilets', 'amenity', 'public', 'park', 'street', 'building', 'transportation'
+              ].includes(String(key).toLowerCase())
+            );
+            
+            // 检查标签值是否包含公共厕所相关词汇
+            const hasPublicTagInValues = Object.values(tags).some(tag => 
+              [
+                'toilets', 'amenity', 'public', 'park', 'street', 'building', 'transportation'
+              ].includes(String(tag).toLowerCase())
+            );
+            
+            // 如果是商业场所厕所
+            const isBusinessRestroom = restroom.isCommercial === true ||
+              hasBusinessTagInKeys || hasBusinessTagInValues;
+            
+            // 如果是公共厕所（非商业厕所）
+            const isPublicRestroom = !isBusinessRestroom;
+            
+            // 添加调试日志
+            console.log('Restroom details - isPublic:', isPublicRestroom, 'isBusiness:', isBusinessRestroom, 'showBusiness:', showBusinessRestrooms);
+            
+            // 显示条件：当显示商业厕所开启时显示所有厕所，否则只显示公共厕所
+            const shouldShow = showBusinessRestrooms || isPublicRestroom;
+            console.log('Should show restroom:', shouldShow);
+            return shouldShow;
+          })
           .map((restroom, index) => (
-          <div
-            key={restroom.id}
-            onClick={() => onRestroomSelect(restroom)}
-            className="p-4 rounded-lg bg-gray-700/50 hover:bg-gray-600/50 cursor-pointer"
-          >
-            <div className="font-bold text-white text-lg truncate">{restroom.address}</div>
-            <div className="mt-1 text-gray-300 text-sm">
-              {Object.entries(restroom.tags ?? {}).map(([key, value]) => (
-                <div key={key} className="flex items-center gap-1">
-                  <span className="font-mono text-xs text-gray-400">{key}:</span>
-                  <span>{String(value)}</span>
+            <div
+              key={restroom.id}
+              onClick={() => onRestroomSelect(restroom)}
+              className="p-4 rounded-lg bg-gray-700/50 hover:bg-gray-600/50 cursor-pointer"
+            >
+              <div className="font-bold text-white text-lg truncate">{restroom.address}</div>
+              <div className="mt-1 text-gray-300 text-sm">
+                {restroom.tags && Object.keys(restroom.tags).length > 0 ? (
+                  Object.entries(restroom.tags).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-1">
+                      <span className="font-mono text-xs text-gray-400">{key}:</span>
+                      <span>{String(value)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-gray-400 text-xs">No additional information</div>
+                )}
+                {/* 显示是否为商业厕所 */}
+                <div className="mt-1 flex items-center gap-1">
+                  <span className="font-mono text-xs text-gray-400">Business:</span>
+                  <span className={restroom.isCommercial ? "text-green-400" : "text-red-400"}>
+                    {restroom.isCommercial ? "Yes" : "No"}
+                  </span>
                 </div>
-              ))}
-              {/* 显示是否为商业厕所 */}
-              <div className="mt-1 flex items-center gap-1">
-                <span className="font-mono text-xs text-gray-400">Business:</span>
-                <span className={restroom.isCommercial ? "text-green-400" : "text-red-400"}>
-                  {restroom.isCommercial ? "Yes" : "No"}
-                </span>
               </div>
-            </div>
-            <div className="mt-3 pt-3 flex justify-between items-center text-xs">
-              <div className="flex items-center text-gray-300">
-                <Clock className="w-4 h-4 mr-2 flex-shrink-0" />
-                <span>
-                  {typeof restroom.distance === "number"
-                    ? `${restroom.distance.toFixed(2)} km away`
-                    : "Distance unavailable"}
-                </span>
+              <div className="mt-3 pt-3 flex justify-between items-center text-xs">
+                <div className="flex items-center text-gray-300">
+                  <Clock className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span>
+                    {typeof restroom.distance === "number"
+                      ? `${restroom.distance.toFixed(2)} km away`
+                      : "Distance unavailable"}
+                  </span>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const url = `https://www.google.com/maps/dir/?api=1&destination=${restroom.lat},${restroom.lon}`
+                    window.open(url, "_blank")
+                  }}
+                  aria-label="Navigate to restroom"
+                  className="flex items-center gap-1 text-blue-400 hover:text-blue-600"
+                >
+                  <Navigation className="w-5 h-5" />
+                  <span className="text-xs">Navigate</span>
+                </button>
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  const url = `https://www.google.com/maps/dir/?api=1&destination=${restroom.lat},${restroom.lon}`
-                  window.open(url, "_blank")
-                }}
-                aria-label="Navigate to restroom"
-                className="flex items-center gap-1 text-blue-400 hover:text-blue-600"
-              >
-                <Navigation className="w-5 h-5" />
-                <span className="text-xs">Navigate</span>
-              </button>
+              {index !== restrooms.length - 1 && (
+                <div className="border-t border-gray-600 mt-3" />
+              )}
             </div>
-            {index !== restrooms.length - 1 && (
-              <div className="border-t border-gray-600 mt-3" />
-            )}
-          </div>
-        ))}
+          ))}
       </div>
     </motion.div>
   )

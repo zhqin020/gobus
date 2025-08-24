@@ -260,19 +260,69 @@ const MapView = forwardRef<
         );
       })}
       {/* Render restroom markers */}
-      {(Array.isArray(restrooms) ? restrooms : []).map((restroom) => {
+      {(Array.isArray(restrooms) ? restrooms : [])
+        .filter(restroom => {
+          // Filter logic should match RestroomView component
+          // Since MapView doesn't have showBusinessRestrooms state, we need to handle this differently
+          // For now, we'll render all restrooms as before, but this should be coordinated with RestroomView
+          return true;
+        })
+        .map((restroom) => {
         const isSelected = restroom.id === selectedRestroomId;
+        const isCommercial = (restroom as any).isCommercial;
+        
         if (typeof restroom.lat !== 'number' || typeof restroom.lon !== 'number') {
           console.warn(`Invalid restroom marker coordinates for id ${restroom.id}:`, restroom);
           return null;
         }
+
+        // Choose appropriate icon based on commercial status and selection
+        let icon;
+        if (isSelected) {
+          icon = isCommercial ? selectedRestroomIcon : restroomIcon;
+        } else {
+          icon = isCommercial ? selectedRestroomIcon : restroomIcon;
+        }
+        
         return (
           <Marker
             key={restroom.id}
             position={{ lat: restroom.lat, lng: restroom.lon }}
-            icon={isSelected ? selectedRestroomIcon : restroomIcon}
+            icon={icon}
           >
-            <Popup>{restroom.address}</Popup>
+            <Popup>
+              <div className="p-2 min-w-[200px]">
+                <h3 className="font-bold text-lg mb-2">{(restroom as any).tags?.name || 'Restroom'}</h3>
+                <p className="text-sm text-gray-600 mb-2">{restroom.address}</p>
+                
+                <div className="space-y-1 text-sm">
+                  {(restroom as any).distance && (
+                    <div className="flex items-center gap-1">
+                      <span className="font-semibold">Distance:</span>
+                      <span>{(restroom as any).distance.toFixed(2)} km</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center gap-1">
+                    <span className="font-semibold">Type:</span>
+                    <span className={isCommercial ? "text-red-600 font-medium" : "text-blue-600 font-medium"}>
+                      {isCommercial ? 'Commercial' : 'Public'}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="mt-3 pt-2 border-t">
+                  <a 
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${restroom.lat},${restroom.lon}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  >
+                    Get Directions →
+                  </a>
+                </div>
+              </div>
+            </Popup>
           </Marker>
         );
       })}

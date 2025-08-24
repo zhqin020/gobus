@@ -41,3 +41,5 @@ refer/
 keys/
 data/
 *.log
+/test
+/logs

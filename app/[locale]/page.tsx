@@ -464,6 +464,35 @@ export default function TransitApp() {
       }
     }
 
+    // Prepare the list to render: when searching we show searchResults, otherwise routes
+    const sourceList = searching ? (searchResults ?? []) : (routes ?? []);
+
+    // Normalization helper for route display key (extract leading digits when possible)
+    const normalizeDisplayForRoute = (r: any) => {
+      if (!r) return '';
+      const raw = r.route_short_name;
+      if (raw === undefined || raw === null || raw === '') {
+        return String(r.route_id ?? '');
+      }
+      const trimmed = String(raw).trim();
+      const m = trimmed.match(/^\s*([0-9]+)\b/);
+      if (m && m[1]) return m[1];
+      return trimmed;
+    };
+
+    // If not searching, dedupe the routes by normalized display key to avoid duplicate visual entries
+    let renderList: any[] = sourceList;
+    if (!searching && Array.isArray(sourceList)) {
+      const map = new Map<string, any>();
+      sourceList.forEach((r: any) => {
+        const key = normalizeDisplayForRoute(r) || String(r.route_id ?? '');
+        if (!map.has(key)) {
+          map.set(key, { ...r, displayKey: key });
+        }
+      });
+      renderList = Array.from(map.values());
+    }
+
     return (
       <motion.div
         key={currentAddressName}
@@ -489,9 +518,9 @@ export default function TransitApp() {
           {routesError && (
             <div className="text-red-400 p-2">{routesError}</div>
           )}
-            {(searching ? (searchResults ?? []) : (routes ?? [])).length > 0 ? (
-              Array.isArray(searching ? searchResults : routes) && (searching ? searchResults : routes).map((route) => (
-              <Card key={route.route_id} className="bg-[#23272F] border border-[#23272F] shadow-md cursor-pointer"
+            {renderList.length > 0 ? (
+              Array.isArray(renderList) && renderList.map((route, idx) => (
+              <Card key={`${route?.displayKey ?? route?.route_id ?? 'item'}-${idx}`} className="bg-[#23272F] border border-[#23272F] shadow-md cursor-pointer"
                 onClick={() => {
                   console.log('[HomeView] Card onClick, route:', route);
                   handleRouteSelect(route);
@@ -938,7 +967,41 @@ export default function TransitApp() {
                                 // Fetch nearby routes for this location
                                 const nearbyRes = await fetch(`/api/gtfs/route/nearby?lat=${lat}&lng=${lng}`)
                                 const nearbyRoutes = nearbyRes.ok ? await nearbyRes.json() : []
-                                setNearbyRoutes(Array.isArray(nearbyRoutes) ? nearbyRoutes : [])
+
+                                // Client-side normalization + dedupe: extract numeric route_short_name when possible
+                                const normalizeDisplay = (r: any) => {
+                                  if (!r) return '';
+                                  const raw = r.route_short_name;
+                                  if (raw === undefined || raw === null || raw === '') {
+                                    return String(r.route_id ?? '');
+                                  }
+                                  const trimmed = String(raw).trim();
+                                  const m = trimmed.match(/^\s*([0-9]+)\b/);
+                                  if (m && m[1]) return m[1];
+                                  return trimmed;
+                                };
+
+                                console.log('[Nearby] raw API nearbyRoutes:', nearbyRoutes);
+
+                                let uniqueNearby: any[] = [];
+                                if (Array.isArray(nearbyRoutes) && nearbyRoutes.length > 0) {
+                                  const routeMap = new Map<string, any>();
+                                  nearbyRoutes.forEach((r: any) => {
+                                    const key = normalizeDisplay(r) || String(r.route_id ?? '');
+                                    if (!routeMap.has(key)) {
+                                      // attach canonical display key for rendering
+                                      const entry = { ...r, displayKey: key };
+                                      routeMap.set(key, entry);
+                                    } else {
+                                      // If we've already seen this display key, prefer to keep the first or
+                                      // optionally prefer one with trip_headsign present. For now keep first.
+                                    }
+                                  });
+                                  uniqueNearby = Array.from(routeMap.values());
+                                }
+
+                                console.log('[Nearby] uniqueNearby after client dedupe:', uniqueNearby);
+                                setNearbyRoutes(uniqueNearby);
                                 setShowSelectedAddressPanel(true)
                                 if (activeTab !== 'search') {
                                   setActiveTab('search')
@@ -1036,8 +1099,8 @@ export default function TransitApp() {
                 {(nearbyRoutes.length === 0 || selectedAddress?.lat === null || selectedAddress?.lng === null) ? (
                   <div className="text-gray-400 p-2">No nearby routes found.</div>
                 ) : (
-                  nearbyRoutes.map((route) => (
-                    <Card key={route.route_id} className="bg-[#23272F] border border-[#23272F] shadow-md cursor-pointer mb-2"
+                  nearbyRoutes.map((route, idx) => (
+                    <Card key={`${route?.displayKey ?? route?.route_id ?? 'nearby'}-${idx}`} className="bg-[#23272F] border border-[#23272F] shadow-md cursor-pointer mb-2"
                       onClick={() => {
                         setSelectedRoute(route)
                         setIsStopsViewOpen(true)
@@ -1061,6 +1124,9 @@ export default function TransitApp() {
               loading={loadingRestrooms}
               error={restroomError}
               onRestroomSelect={handleRestroomSelect}
+              onClose={() => setActiveTab('home')}
+              showBusinessRestrooms={false}
+              setShowBusinessRestrooms={() => {}}
             />
           )}
           {activeTab === 'favorite' && userLocation && (!Array.isArray(restrooms) || restrooms.length === 0) && (
