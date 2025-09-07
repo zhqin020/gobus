@@ -1,7 +1,21 @@
 import { NextResponse } from 'next/server';
 import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
 import path from 'path';
 import fs from 'fs';
+
+// Define Restroom type
+interface Restroom {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lon: number;
+  distance: number;
+  is_open: boolean;
+  is_commercial: boolean;
+  tags?: any;
+}
 
 // Haversine formula to calculate distance between two points
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -45,6 +59,7 @@ async function fetchPublicBathroomsAPI(lat: number, lng: number) {
       return [];
     }
 
+    console.log(`[API /api/restrooms] Fetching from Public Bathrooms API with lat: ${lat}, lng: ${lng}`);
     const response = await fetch(
       `https://public-bathrooms.p.rapidapi.com/bathrooms?lat=${lat}&lng=${lng}`,
       {
@@ -56,13 +71,14 @@ async function fetchPublicBathroomsAPI(lat: number, lng: number) {
       }
     );
 
+    console.log(`[API /api/restrooms] Response status: ${response.status}`);
     if (!response.ok) {
       throw new Error('Failed to fetch data from Public Bathrooms API. Status: ' + response.status);
     }
 
     const data = await response.json();
     
-    return data.map((restroom: any) => {
+    return data.map((restroom: { id: string; name: string; address?: string; latitude: number; longitude: number; tags?: any; }) => {
       // 从tags中提取地址信息
       const tags = restroom.tags || { name: restroom.name };
       let address = restroom.address || 'Address not available';
@@ -157,45 +173,274 @@ async function fetchPublicBathroomsAPI(lat: number, lng: number) {
   }
 }
 
+// 从Google Places API获取数据
+async function fetchGooglePlacesAPI(lat: number, lng: number) {
+  try {
+    // 读取 keys/keys.json
+    const keysPath = path.join(process.cwd(), 'keys', 'keys.json');
+    const content = await fs.promises.readFile(keysPath, 'utf-8');
+    const json = JSON.parse(content);
+    // Google API Key
+    let API_KEY = '';
+    if (json.MapApi && json.MapApi.Google && json.MapApi.Google.apiKey) {
+      API_KEY = json.MapApi.Google.apiKey;
+    }
+    if (!API_KEY) {
+      console.warn('[API /api/restrooms] Google Places API key not provided');
+      return [];
+    }
+
+    console.log(`[API /api/restrooms] Fetching from Google Places API with lat: ${lat}, lng: ${lng}`);
+    
+    // 搜索附近的餐厅、咖啡店、购物中心等可能有厕所的地方
+    const types = ['restaurant', 'cafe', 'shopping_mall', 'fast_food'];
+    const results = [];
+    
+    for (const type of types) {
+      try {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=5000&type=${type}&key=${API_KEY}`,
+          {
+            headers: {
+              'User-Agent': 'GoBus/1.0 (https://github.com/gobus-app/gobus)'
+            }
+          }
+        );
+
+        if (!response.ok) {
+          console.warn(`[API /api/restrooms] Google Places API (${type}) response not OK:`, response.status);
+          continue;
+        }
+
+        const data = await response.json();
+        if (data.results && Array.isArray(data.results)) {
+          results.push(...data.results.map((place: any) => ({
+            id: `google_${place.place_id}`, // 添加前缀以避免ID冲突
+            tags: {
+              name: place.name,
+              type: place.types.join(' '),
+              brand: place.name.toLowerCase(),
+              amenity: type
+            },
+            address: place.vicinity || 'Address not available',
+            lat: place.geometry.location.lat,
+            lon: place.geometry.location.lng,
+            distance: getDistance(lat, lng, place.geometry.location.lat, place.geometry.location.lng),
+            isCommercial: true // Google Places的结果默认都是商业场所
+          })));
+        }
+      } catch (error) {
+        console.error(`[API /api/restrooms] Error fetching from Google Places API (${type}):`, error);
+      }
+    }
+
+    console.log(`[API /api/restrooms] Google Places API returned ${results.length} results`);
+    return results;
+  } catch (error) {
+    console.error('[API /api/restrooms] Error in fetchGooglePlacesAPI:', error);
+    return [];
+  }
+}
+
+// 从Refuge Restrooms API获取数据
+async function fetchRefugeRestroomsAPI(lat: number, lng: number) {
+  try {
+    // 读取 keys/keys.json
+    const keysPath = path.join(process.cwd(), 'keys', 'keys.json');
+    const content = await fs.promises.readFile(keysPath, 'utf-8');
+    const json = JSON.parse(content);
+    // Refuge Restrooms API Key (大多数请求不需要API密钥)
+    let API_KEY = '';
+    if (json.RapidAPI && json.RapidAPI.gobus && json.RapidAPI.gobus.apiKey) {
+      API_KEY = json.RapidAPI.gobus.apiKey;
+    }
+    
+    console.log(`[API /api/restrooms] Fetching from Refuge Restrooms API with lat: ${lat}, lng: ${lng}`);
+    const response = await fetch(
+      `https://www.refugerestrooms.org/api/v1/restrooms/nearby?latitude=${lat}&longitude=${lng}&radius=5`,
+      {
+        headers: {
+          'Authorization': API_KEY ? `Token token=${API_KEY}` : '',
+          'User-Agent': 'GoBus/1.0 (https://github.com/gobus-app/gobus)'
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn('[API /api/restrooms] Refuge Restrooms API response not OK:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    
+    const results = data.map((restroom: any) => {
+      // 检查是否属于商业品牌
+      const isCommercial = COMMERCIAL_BRANDS.some(brand => 
+        (restroom.name && restroom.name.toLowerCase().includes(brand)) ||
+        (restroom.street && restroom.street.toLowerCase().includes(brand))
+      );
+      
+      return {
+        id: `refuge_${restroom.id}`, // 添加前缀以避免ID冲突
+        tags: {
+          name: restroom.name,
+          ...restroom
+        },
+        address: restroom.street || 'Address not available',
+        lat: restroom.latitude,
+        lon: restroom.longitude,
+        distance: getDistance(lat, lng, restroom.latitude, restroom.longitude),
+        isCommercial: isCommercial
+      };
+    });
+
+    console.log(`[API /api/restrooms] Refuge Restrooms API returned ${results.length} results`);
+    return results;
+  } catch (error) {
+    console.error('[API /api/restrooms] Error fetching from Refuge Restrooms API:', error);
+    return [];
+  }
+}
+
+// 从当地城市公共数据接口获取数据
+async function fetchCityRestroomsAPI(lat: number, lng: number) {
+  try {
+    // 定义城市API端点
+    const API_ENDPOINTS = {
+      vancouver: 'https://opendata.vancouver.ca/api/explore/v2.1/catalog/datasets/public-washrooms/records?limit=100',
+      toronto: 'https://open.toronto.ca/api/v1/datastore/search?resource_id=84045937-0341-4561-81e0-72125559fc6c&limit=100',
+    };
+    
+    const results = [];
+    
+    // 尝试获取几个主要城市的数据
+    for (const [city, endpoint] of Object.entries(API_ENDPOINTS)) {
+      try {
+        console.log(`[API /api/restrooms] Fetching from ${city} city API`);
+        const response = await fetch(endpoint, {
+          headers: {
+            'User-Agent': 'GoBus/1.0 (https://github.com/gobus-app/gobus)'
+          }
+        });
+        
+        if (!response.ok) {
+          console.warn(`[API /api/restrooms] ${city} city API response not OK:`, response.status);
+          continue;
+        }
+        
+        const data = await response.json();
+        
+        // 根据不同城市API的响应格式处理数据
+        let cityRestrooms = [];
+        if (city === 'vancouver' && data.results && Array.isArray(data.results)) {
+          cityRestrooms = data.results.map((item: any) => ({
+            id: `van_${item.id}`,
+            tags: {
+              name: item.name || 'Public Restroom',
+              amenity: 'toilets'
+            },
+            address: item.address || 'Vancouver, BC',
+            lat: item.geom?.coordinates?.[1],
+            lon: item.geom?.coordinates?.[0],
+            distance: getDistance(lat, lng, item.geom?.coordinates?.[1], item.geom?.coordinates?.[0]),
+            isCommercial: false
+          })).filter((r: any) => r.lat && r.lon); // 过滤无效坐标
+        }
+        
+        if (city === 'toronto' && data.records && Array.isArray(data.records)) {
+          cityRestrooms = data.records.map((item: any) => ({
+            id: `tor_${item.id}`,
+            tags: {
+              name: item.facility_name || 'Public Restroom',
+              amenity: 'toilets'
+            },
+            address: `${item.address_number} ${item.street_name}, Toronto, ON`,
+            lat: item.latitude,
+            lon: item.longitude,
+            distance: getDistance(lat, lng, item.latitude, item.longitude),
+            isCommercial: false
+          })).filter((r: any) => r.lat && r.lon); // 过滤无效坐标
+        }
+        
+        results.push(...cityRestrooms);
+        console.log(`[API /api/restrooms] ${city} city API returned ${cityRestrooms.length} results`);
+      } catch (error) {
+        console.error(`[API /api/restrooms] Error fetching from ${city} city API:`, error);
+      }
+    }
+    
+    return results;
+  } catch (error) {
+    console.error('[API /api/restrooms] Error in fetchCityRestroomsAPI:', error);
+    return [];
+  }
+}
+
 async function fetchRestroomsFromPublicAPI(lat: number, lng: number) {
   // 优化的Overpass查询
-    const overpassQuery = `[out:json][timeout:25];
-      // 基础公共厕所（所有类型的公共厕所）
-      node["amenity"="toilets"]
-        (around:5000,${lat},${lng});
-      // 商业品牌厕所
-      node["amenity"="toilets"]["brand"~"${COMMERCIAL_BRANDS.join('|')}"]
-        (around:5000,${lat},${lng});
-      // 商场和购物中心厕所
-      node["amenity"="toilets"]["destination"~"mall|shopping|center"]
-        (around:5000,${lat},${lng});
-      // 搜索特定品牌Superfresh和Gourmet Garage的厕所
-      node["amenity"="toilets"]["name"~"Superfresh|Gourmet Garage"]
-        (around:5000,${lat},${lng});
-      out body;`;
+  const overpassQuery = `[out:json][timeout:25];
+    // 基础公共厕所（所有类型的公共厕所）
+    node["amenity"="toilets"]
+      (around:5000,${lat},${lng});
+    // 商业品牌厕所
+    node["amenity"="toilets"]["brand"~"${COMMERCIAL_BRANDS.join('|')}"]
+      (around:5000,${lat},${lng});
+    // 商场和购物中心厕所
+    node["amenity"="toilets"]["destination"~"mall|shopping|center"]
+      (around:5000,${lat},${lng});
+    // 搜索特定品牌Superfresh和Gourmet Garage的厕所
+    node["amenity"="toilets"]["name"~"Superfresh|Gourmet Garage"]
+      (around:5000,${lat},${lng});
+    out body;`;
 
   const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
 
   try {
-      // 并行调用多个API
-      const [overpassResponse, publicBathroomsResponse] = await Promise.all([
-        fetch(overpassUrl, {
-          headers: {
-            'User-Agent': 'GoBus/1.0 (https://github.com/gobus-app/gobus)'
-          }
-        }),
-        fetchPublicBathroomsAPI(lat, lng)
-      ]);
+    // 改进的API调用方法：使用Promise.allSettled确保即使某个API失败也能继续
+    const [overpassResult, publicBathroomsResult, googlePlacesResult, refugeRestroomsResult, cityRestroomsResult] = await Promise.allSettled([
+      fetch(overpassUrl, {
+        headers: {
+          'User-Agent': 'GoBus/1.0 (https://github.com/gobus-app/gobus)'
+        }
+      }).then(async (res) => {
+        if (!res.ok) throw new Error(`Overpass API error: ${res.status}`);
+        const data = await res.json();
+        console.log(`[API /api/restrooms] Overpass API returned ${data.elements.length} elements`);
+        return data;
+      }).catch(err => {
+        console.error('[API /api/restrooms] Error fetching from Overpass API:', err);
+        return { elements: [] }; // 返回空数据而不是抛出错误
+      }),
+      
+      fetchPublicBathroomsAPI(lat, lng).catch(err => {
+        console.error('[API /api/restrooms] Error fetching from Public Bathrooms API:', err);
+        return [];
+      }),
+      
+      fetchGooglePlacesAPI(lat, lng).catch(err => {
+        console.error('[API /api/restrooms] Error fetching from Google Places API:', err);
+        return [];
+      }),
+      
+      fetchRefugeRestroomsAPI(lat, lng).catch(err => {
+        console.error('[API /api/restrooms] Error fetching from Refuge Restrooms API:', err);
+        return [];
+      }),
+      
+      fetchCityRestroomsAPI(lat, lng).catch(err => {
+        console.error('[API /api/restrooms] Error fetching from City Restrooms API:', err);
+        return [];
+      })
+    ]);
 
-      // 处理Overpass API响应
-      if (!overpassResponse.ok) {
-        throw new Error('Failed to fetch data from Overpass API. Status: ' + overpassResponse.status);
-      }
+    // 提取成功的结果数据
+    const overpassData = overpassResult.status === 'fulfilled' ? overpassResult.value : { elements: [] };
+    const publicBathroomsResponse = publicBathroomsResult.status === 'fulfilled' ? publicBathroomsResult.value : [];
+    const googlePlacesResponse = googlePlacesResult.status === 'fulfilled' ? googlePlacesResult.value : [];
+    const refugeRestroomsResponse = refugeRestroomsResult.status === 'fulfilled' ? refugeRestroomsResult.value : [];
+    const cityRestroomsResponse = cityRestroomsResult.status === 'fulfilled' ? cityRestroomsResult.value : [];
 
-      const overpassData = await overpassResponse.json();
-
-      // 处理Overpass数据
-      console.log(`[API /api/restrooms] Overpass API returned ${overpassData.elements.length} elements`);
+    // 处理Overpass数据
       const overpassRestrooms = await Promise.all(overpassData.elements.map(async (item: any) => {
         const tags = item.tags || {};
         // 优先从tags中提取地址信息
@@ -318,12 +563,19 @@ async function fetchRestroomsFromPublicAPI(lat: number, lng: number) {
       }));
 
       // 合并所有API数据
-      console.log(`[API /api/restrooms] Overpass restrooms: ${overpassRestrooms.length}, Public Bathrooms: ${publicBathroomsResponse.length}`);
-      const allRestrooms = [...overpassRestrooms, ...publicBathroomsResponse];
+      // 添加详细的API响应日志
+      console.log(`[API /api/restrooms] API响应详情:`);
+      console.log(`  - Overpass API返回元素数: ${overpassData.elements.length}`);
+      console.log(`  - Overpass处理后厕所数: ${overpassRestrooms.length}`);
+      console.log(`  - Public Bathrooms API返回数: ${publicBathroomsResponse.length}`);
+      console.log(`  - Google Places API返回数: ${googlePlacesResponse.length}`);
+      console.log(`  - Refuge Restrooms API返回数: ${refugeRestroomsResponse.length}`);
+      console.log(`  - City Restrooms API返回数: ${cityRestroomsResponse.length}`);
+      const allRestrooms = [...overpassRestrooms, ...publicBathroomsResponse, ...googlePlacesResponse, ...refugeRestroomsResponse, ...cityRestroomsResponse];
 
       // 改进的去重逻辑：基于地理位置去重，优先保留地址信息更完整的数据
       console.log(`[API /api/restrooms] Total restrooms before deduplication: ${allRestrooms.length}`);
-      const uniqueRestrooms = Array.from(
+      const uniqueRestrooms = Array.from<Restroom>(
         allRestrooms.reduce((map, r) => {
           // 创建一个地理位置键（精度到小数点后5位）
           const geoKey = `${Math.round(r.lat * 100000)},${Math.round(r.lon * 100000)}`;
@@ -360,6 +612,16 @@ async function fetchRestroomsFromPublicAPI(lat: number, lng: number) {
       
       console.log(`[API /api/restrooms] Total restrooms after deduplication: ${uniqueRestrooms.length}`);
       
+      // 显示去重后不同类型厕所的分布
+      const commercialCount = uniqueRestrooms.filter(r => r.isCommercial).length;
+      const publicCount = uniqueRestrooms.filter(r => !r.isCommercial).length;
+      console.log(`[API /api/restrooms] 厕所类型分布 - 商业厕所: ${commercialCount}, 公共厕所: ${publicCount}`);
+      
+      // 如果去重后数量为0，添加警告信息
+      if (uniqueRestrooms.length === 0) {
+        console.warn(`[API /api/restrooms] WARNING: No unique restrooms found after deduplication`);
+      }
+      
       // 添加调试日志，检查是否有Superfresh或Gourmet Garage
       const targetRestrooms = uniqueRestrooms.filter(r => 
         (r.tags.name && (r.tags.name.includes('Superfresh') || r.tags.name.includes('Gourmet Garage'))) ||
@@ -382,101 +644,108 @@ async function fetchRestroomsFromPublicAPI(lat: number, lng: number) {
     }
 }
 
-function queryRestroomsFromDB(db: sqlite3.Database, lat: number, lng: number): Promise<any[]> {
-  return new Promise((resolve, reject) => {
-    // Ensure restrooms table exists before querying
-    db.run(`CREATE TABLE IF NOT EXISTS restrooms (
-      id TEXT PRIMARY KEY,
-      name TEXT,
-      address TEXT,
-      lat REAL,
-      lon REAL,
-      distance REAL,
-      is_open INTEGER,
-      is_commercial INTEGER
-    );`, (createErr: Error | null) => {
-      if (createErr) {
-        reject(createErr);
-        return;
-      }
-      const sql = `
-        SELECT id, name, address, lat, lon, distance, is_open, is_commercial
-        FROM restrooms
-        WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
-      `;
-      db.all(sql, [lat - 0.05, lat + 0.05, lng - 0.05, lng + 0.05], (err, rows: any[]) => {
-        if (err) {
-          reject(err);
-        } else {
-          // Calculate distance for each restroom and convert is_commercial back to boolean
-          const restroomsWithDistance = rows.map(row => ({
-            ...row,
-            distance: getDistance(lat, lng, row.lat, row.lon),
-            isCommercial: row.is_commercial === 1
-          }));
-          resolve(restroomsWithDistance);
-        }
-      });
-    });
-  });
+async function queryRestroomsFromDB(db: any, lat: number, lng: number): Promise<any[]> {
+  // Ensure restrooms table exists before querying
+  await db.run(`CREATE TABLE IF NOT EXISTS restrooms (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    address TEXT,
+    lat REAL,
+    lon REAL,
+    distance REAL,
+    is_open INTEGER,
+    is_commercial INTEGER
+  );`);
+
+  const sql = `
+    SELECT id, name, address, lat, lon, distance, is_open, is_commercial
+    FROM restrooms
+    WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
+  `;
+  
+  const rows = await db.all(sql, [lat - 0.05, lat + 0.05, lng - 0.05, lng + 0.05]);
+  
+  // Calculate distance for each restroom and convert is_commercial back to boolean
+  const restroomsWithDistance = rows.map((row: any) => ({
+    ...row,
+    distance: getDistance(lat, lng, row.lat, row.lon),
+    isCommercial: row.is_commercial === 1
+  }));
+  
+  return restroomsWithDistance;
 }
 
-function updateRestroomsInDB(db: sqlite3.Database, restrooms: any[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.serialize(() => {
-      db.run(`CREATE TABLE IF NOT EXISTS restrooms (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        address TEXT,
-        lat REAL,
-        lon REAL,
-        distance REAL,
-        is_open INTEGER,
-        is_commercial INTEGER
-      );`, (err) => {
-        if (err) reject(err);
-      });
+async function updateRestroomsInDB(db: any, restrooms: any[]): Promise<void> {
+  // Ensure restrooms table exists
+  await db.run(`CREATE TABLE IF NOT EXISTS restrooms (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    address TEXT,
+    lat REAL,
+    lon REAL,
+    distance REAL,
+    is_open INTEGER,
+    is_commercial INTEGER
+  );`);
 
-      const stmt = db.prepare(`INSERT INTO restrooms (id, name, address, lat, lon, distance, is_open, is_commercial)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          name=excluded.name,
-          address=excluded.address,
-          lat=excluded.lat,
-          lon=excluded.lon,
-          distance=excluded.distance,
-          is_open=excluded.is_open,
-          is_commercial=excluded.is_commercial;`);
+  // Prepare the statement
+  const stmt = await db.prepare(`INSERT INTO restrooms (id, name, address, lat, lon, distance, is_open, is_commercial)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name=excluded.name,
+      address=excluded.address,
+      lat=excluded.lat,
+      lon=excluded.lon,
+      distance=excluded.distance,
+      is_open=excluded.is_open,
+      is_commercial=excluded.is_commercial;`);
 
-      db.run('BEGIN TRANSACTION');
-      for (const restroom of restrooms) {
-        stmt.run([
-            restroom.id,
-            restroom.tags.name || '',
-            restroom.address,
-            restroom.lat,
-            restroom.lon,
-            restroom.distance,
-            1,
-            restroom.isCommercial ? 1 : 0
-          ]);
-      }
-      db.run('COMMIT', (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-      stmt.finalize();
-    });
-  });
+  try {
+    await db.run('BEGIN TRANSACTION');
+    
+    for (const restroom of restrooms) {
+      await stmt.run([
+        restroom.id,
+        restroom.tags.name || '',
+        restroom.address,
+        restroom.lat,
+        restroom.lon,
+        restroom.distance,
+        1,
+        restroom.isCommercial ? 1 : 0
+      ]);
+    }
+    
+    await db.run('COMMIT');
+  } finally {
+    await stmt.finalize();
+  }
 }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const lat = parseFloat(searchParams.get('lat') || '0');
-  const lng = parseFloat(searchParams.get('lng') || '0');
+  const latParam = searchParams.get('lat');
+  // Accept both 'lng' and 'lon' for longitude parameter
+  const lngParam = searchParams.get('lng') || searchParams.get('lon');
+  
+  // Validate and parse coordinates
+  if (!latParam || !lngParam) {
+    return NextResponse.json({ error: 'Missing required parameters: lat and lng/lon' }, { status: 400 });
+  }
+  
+  const lat = parseFloat(latParam);
+  const lng = parseFloat(lngParam);
+  
+  // Validate coordinate ranges
+  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return NextResponse.json({ error: 'Invalid coordinates' }, { status: 400 });
+  }
 
   // Open database
-  const db = new sqlite3.Database(DB_PATH);
+  const db = await open({
+    filename: DB_PATH,
+    driver: sqlite3.Database,
+  });
 
   // Load version info
   let versionInfo: { restroomVersion?: number } = {};
@@ -515,7 +784,8 @@ export async function GET(request: Request) {
     // 如果有有效的文件缓存，直接使用
     if (cachedRestrooms.length > 0) {
       db.close();
-      return NextResponse.json(cachedRestrooms);
+      // 修改缓存返回格式，将数据包装在value字段中
+      return NextResponse.json({ value: cachedRestrooms });
     }
 
     // Query restrooms from DB
@@ -526,8 +796,14 @@ export async function GET(request: Request) {
     if (restrooms.length === 0 || now - restroomVersion > oneDay) {
       console.log('[API /api/restrooms] Data is empty or expired, fetching from public APIs');
       // Fetch from public APIs
+      console.log(`[API /api/restrooms] Starting fetch with coordinates: lat=${lat}, lng=${lng}`);
       const publicRestrooms = await fetchRestroomsFromPublicAPI(lat, lng);
       console.log(`[API /api/restrooms] Fetched ${publicRestrooms.length} restrooms from public APIs`);
+      
+      // 如果没有获取到数据，添加更多调试信息
+      if (publicRestrooms.length === 0) {
+        console.warn(`[API /api/restrooms] WARNING: No restrooms found in any public API for this location`);
+      }
 
       // Update DB
       await updateRestroomsInDB(db, publicRestrooms);
@@ -543,11 +819,31 @@ export async function GET(request: Request) {
       console.log('[API /api/restrooms] Using cached restroom data from database');
     }
 
-    // Filter by distance (<= 5km), sort by distance, and take top 30
-    const filteredAndSortedRestrooms = restrooms
-      .filter(r => r.distance != null && r.distance <= 5)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, 30);
+    // 过滤和排序
+  // 为了确保能显示数据，放宽距离限制并添加更多调试信息
+  const filteredAndSortedRestrooms = restrooms
+    // 首先尝试只显示5公里内的厕所
+    .filter(restroom => {
+      const withinDistance = restroom.distance != null && restroom.distance <= 5;
+      if (!withinDistance) {
+        console.log(`Restroom ${restroom.id || 'unknown'} outside 5km limit: ${restroom.distance}km`);
+      }
+      return withinDistance;
+    })
+    .sort((a, b) => (a.distance || 0) - (b.distance || 0)) // 按距离升序排序
+    .slice(0, 30);
+
+  console.log('Filtered and sorted restrooms:', filteredAndSortedRestrooms);
+  console.log('Sample restroom structure:', filteredAndSortedRestrooms[0]);
+  console.log('All restrooms before filtering:', restrooms.length);
+  console.log('Sample of all restrooms:', JSON.stringify(restrooms.slice(0, 1), null, 2));
+
+  // 如果没有找到数据，返回所有可用数据（不限制距离）
+  let finalRestrooms = filteredAndSortedRestrooms;
+  if (finalRestrooms.length === 0 && restrooms.length > 0) {
+    console.log('No restrooms within 5km, returning all available data');
+    finalRestrooms = restrooms.sort((a, b) => (a.distance || 0) - (b.distance || 0)).slice(0, 30);
+  }
 
     // 保存到文件缓存
     try {
@@ -569,7 +865,8 @@ export async function GET(request: Request) {
 
     db.close();
 
-    return NextResponse.json(filteredAndSortedRestrooms);
+    // 返回最终处理后的数据
+  return NextResponse.json({ value: finalRestrooms });
   } catch (error) {
     db.close();
     console.error('[API /api/restrooms] Error:', error);
