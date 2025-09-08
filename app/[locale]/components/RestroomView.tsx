@@ -85,15 +85,21 @@ export default function RestroomView({ restrooms, loading, error, onRestroomSele
     console.log('[RestroomView] Filtered restrooms count:', filteredRestrooms.length);
     if (filteredRestrooms.length > 0) {
       console.log('[RestroomView] Sample of filtered restrooms:', 
-        filteredRestrooms.slice(0, Math.min(5, filteredRestrooms.length)).map(r => ({
-          id: r.id,
-          name: r.name || r.tags?.name,
-          address: r.address,
-          isCommercial: r.isCommercial,
-          distance: r.distance
-        })));
+        filteredRestrooms.slice(0, Math.min(5, filteredRestrooms.length)).map(r => ({id: r.id, name: r.name || r.tags?.name, address: r.address, isCommercial: r.isCommercial, distance: r.distance})));
+      // 检查是否有商业厕所被过滤掉
+      const commercialCount = safeRestrooms.filter(r => r.isCommercial).length;
+      const nonCommercialCount = safeRestrooms.filter(r => !r.isCommercial).length;
+      const shownCommercialCount = filteredRestrooms.filter(r => r.isCommercial).length;
+      console.log(`[RestroomView] Restroom breakdown - Total: ${safeRestrooms.length}, Commercial: ${commercialCount}, Public: ${nonCommercialCount}, Shown: ${filteredRestrooms.length} (Commercial shown: ${shownCommercialCount})`);
+    } else if (safeRestrooms.length > 0) {
+      console.log(`[RestroomView] No restrooms shown after filtering, but received ${safeRestrooms.length} restrooms initially`);
+      console.log(`[RestroomView] Show business restrooms: ${showBusinessRestrooms}`);
+      // 显示所有未被过滤的厕所类型分布
+      const commercialCount = safeRestrooms.filter(r => r.isCommercial).length;
+      const nonCommercialCount = safeRestrooms.filter(r => !r.isCommercial).length;
+      console.log(`[RestroomView] Restroom types - Commercial: ${commercialCount}, Public: ${nonCommercialCount}`);
     }
-  }, [filteredRestrooms]);
+  }, [filteredRestrooms, safeRestrooms, showBusinessRestrooms]);
 
   if (loading) {
     return (

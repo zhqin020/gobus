@@ -147,13 +147,14 @@ export default function TransitApp() {
   // 添加一个测试模式状态，允许查看模拟的实际数据
   const [testMode, setTestMode] = useState(false);
   const [testLocation, setTestLocation] = useState({ lat: 49.2827, lng: -123.1207 }); // 温哥华市中心
+  const [useTestLocation, setUseTestLocation] = useState(true); // 是否在测试模式下使用测试位置
 
   // Fetch restrooms when favorite tab is active, with localStorage caching
   useEffect(() => {
-    if (activeTab === 'favorite' && (userLocation || testMode)) {
-      console.log('Fetching restrooms - testMode:', testMode);
+    if (activeTab === 'favorite' && (userLocation || (testMode && useTestLocation))) {
+      console.log('Fetching restrooms - testMode:', testMode, 'useTestLocation:', useTestLocation);
       // 使用测试位置或实际用户位置
-      const locationToUse = testMode ? testLocation : userLocation;
+      const locationToUse = (testMode && useTestLocation) ? testLocation : userLocation;
       if (!locationToUse) {
         console.log('No location available, cannot fetch restrooms');
         return;
@@ -184,18 +185,22 @@ export default function TransitApp() {
               } else if (Array.isArray(parsed)) {
                 restroomsDataFromCache = parsed;
               }
+              console.log('Successfully parsed cached restroom data, got ' + restroomsDataFromCache.length + ' entries');
             } catch (error) {
               console.error('Failed to parse cached restroom data:', error);
+              // 在解析失败时清除缓存
+              localStorage.removeItem(cacheKey);
+              localStorage.removeItem(cacheTimestampKey);
             }
           }
           console.log('Parsed cached restroom data:', restroomsDataFromCache);
           
           // 缓存逻辑：
           // 1. 测试模式下不使用缓存，强制获取实际数据
-          // 2. 缓存数据少于5条时不使用缓存，避免使用少量的模拟数据
+          // 2. 只要有缓存数据且未过期就使用
           // 3. 缓存过期时不使用缓存
           if (cachedData && cachedTimestamp && now - parseInt(cachedTimestamp) < cacheExpiry && 
-              restroomsDataFromCache.length > 4 && !testMode) {
+              restroomsDataFromCache.length > 0 && !testMode) {
             // 只有当缓存数据足够多且不在测试模式下且缓存未过期时才使用缓存
             console.log('Using cached restroom data (contains ' + restroomsDataFromCache.length + ' entries)');
             setRestrooms(restroomsDataFromCache);
@@ -219,16 +224,48 @@ export default function TransitApp() {
             const data = await response.json();
             console.log('API response data structure:', Object.keys(data));
             console.log('API response data type:', Array.isArray(data) ? 'array' : 'object');
+            console.log('Full API response preview:', typeof data === 'object' ? JSON.stringify(data).substring(0, 300) + '...' : data);
+            
             // 确保正确从API响应中提取数据
             let restroomsData = [];
             if (data) {
+              // 尝试多种数据提取方式，确保获取完整数据
               if (Array.isArray(data.value)) {
                 restroomsData = data.value;
+                console.log(`Extracted ${restroomsData.length} restrooms from data.value`);
               } else if (Array.isArray(data)) {
                 restroomsData = data;
+                console.log(`Extracted ${restroomsData.length} restrooms from data directly`);
+              } else if (data.restrooms && Array.isArray(data.restrooms)) {
+                restroomsData = data.restrooms;
+                console.log(`Extracted ${restroomsData.length} restrooms from data.restrooms`);
+              } else {
+                // 处理可能的其他格式，例如单个对象被错误返回的情况
+                restroomsData = [data];
+                console.warn('API returned a single object instead of array, converting to array');
               }
             }
-            console.log('Parsed API response restroom data:', restroomsData);
+            
+            // 如果数据少于预期，检查API是否返回了特殊格式
+            if (restroomsData.length <= 1) {
+              console.warn(`Only ${restroomsData.length} restroom found, checking for potential format issues...`);
+              // 检查是否有嵌套的数组结构
+              if (typeof data === 'object') {
+                for (const key in data) {
+                  if (Array.isArray(data[key]) && data[key].length > 1) {
+                    console.log(`Found potential restrooms data in ${key} with ${data[key].length} entries`);
+                    restroomsData = data[key];
+                    break;
+                  }
+                }
+              }
+            }
+            
+            console.log('Extracted restrooms count from API:', restroomsData.length);
+            // 打印部分数据样本进行验证
+            if (restroomsData.length > 0) {
+              console.log('API restrooms sample:', restroomsData.slice(0, Math.min(3, restroomsData.length)));
+            }
             console.log('Number of restrooms from API:', restroomsData.length);
             
             // 只有当API确实返回空数据且不在测试模式下才使用模拟数据
@@ -299,10 +336,10 @@ export default function TransitApp() {
               const isMockData = restroomsData.length <= 3 && restroomsData.some(r => r.id?.startsWith('mock-'));
               
               // 缓存策略: 
-              // 1. 非模拟数据且记录超过3条，或者测试模式下有实际数据时缓存
-              // 为了确保能看到实际数据，即使数据少于3条也缓存
+              // 1. 非模拟数据且记录超过0条，或者测试模式下有实际数据时缓存
               if (!isMockData && (restroomsData.length > 0 || (testMode && restroomsData.length > 0))) {
                 console.log('Caching restroom data (contains ' + restroomsData.length + ' entries)');
+                // 缓存结构应该与API返回结构一致，便于后续读取
                 localStorage.setItem(cacheKey, JSON.stringify(restroomsData));
                 localStorage.setItem(cacheTimestampKey, now.toString());
               } 
@@ -1367,16 +1404,32 @@ export default function TransitApp() {
                     className="rounded text-[#3DDC97] focus:ring-[#3DDC97]"
                   />
                   <label htmlFor="testMode" className="text-sm text-white">
-                    启用测试模式（使用温哥华市中心坐标）
+                    启用测试模式
                   </label>
                 </div>
+                {testMode && (
+                  <div className="ml-6 mt-2">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <input
+                        type="checkbox"
+                        id="useTestLocation"
+                        checked={useTestLocation}
+                        onChange={(e) => setUseTestLocation(e.target.checked)}
+                        className="rounded text-[#3DDC97] focus:ring-[#3DDC97]"
+                      />
+                      <label htmlFor="useTestLocation" className="text-sm text-white">
+                        使用测试位置（温哥华市中心）
+                      </label>
+                    </div>
+                  </div>
+                )}
                 <p className="text-xs text-gray-400">
-                  启用后，将使用预设的温哥华市中心坐标（49.2827, -123.1207）来加载实际的厕所数据，
-                  即使没有获取到您的实际位置。
+                  测试模式下可以使用模拟数据或禁用缓存。如果启用"使用测试位置"，将使用预设的温哥华市中心坐标（49.2827, -123.1207），
+                  否则将使用您的实际位置。
                 </p>
               </div>
               
-              {userLocation && (
+              {(userLocation || (testMode && useTestLocation)) && (
                 <RestroomView
                   restrooms={restrooms}
                   loading={loadingRestrooms}
@@ -1392,16 +1445,10 @@ export default function TransitApp() {
                   正在获取您的位置信息...
                 </div>
               )}
-              {testMode && (
-                <RestroomView
-                  restrooms={restrooms}
-                  loading={loadingRestrooms}
-                  error={restroomError}
-                  onRestroomSelect={handleRestroomSelect}
-                  onClose={() => setActiveTab('home')}
-                  showBusinessRestrooms={showBusinessRestrooms}
-                  setShowBusinessRestrooms={setShowBusinessRestrooms}
-                />
+              {testMode && !useTestLocation && !userLocation && (
+                <div className="text-center py-8 text-gray-400">
+                  正在获取您的位置信息...
+                </div>
               )}
             </div>
           )}
