@@ -75,7 +75,7 @@ export default async function handler(
               AND r.route_id != ?
       `;
 
-      db.all(sql, [minLat, maxLat, minLon, maxLon, current_route_id], (err, rows: Route[]) => {
+      db.all(sql, [minLat, maxLat, minLon, maxLon, current_route_id], (err: Error | null, rows: Route[]) => {
           db.close((closeErr) => {
               if (closeErr) {
                   // This error is secondary, log it but don't reject the promise on it

@@ -1,6 +1,6 @@
 import './globals.css';
 import { NextIntlClientProvider } from 'next-intl';
-import { getRequestConfig } from 'next-intl/server';
+import { getMessages } from 'next-intl/server';
 
 export async function generateStaticParams() {
   return ['en', 'zh', 'fr'].map((locale) => ({ locale }));
@@ -13,12 +13,13 @@ export default async function RootLayout({
   children: React.ReactNode;
   params: { locale: string };
 }) {
-  const config = await getRequestConfig({ locale });
+  // 获取对应语言的消息
+  const messages = await getMessages();
 
   return (
     <html lang={locale}>
       <body>
-        <NextIntlClientProvider locale={locale} messages={config.messages}>
+        <NextIntlClientProvider locale={locale} messages={messages}>
           {children}
         </NextIntlClientProvider>
       </body>

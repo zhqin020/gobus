@@ -162,13 +162,14 @@ export default function TransitApp() {
       console.log('Using location for restroom search:', locationToUse);
       
       const fetchRestrooms = async () => {
+        // 为不同位置使用不同的缓存键，避免缓存冲突
+        const cacheKey = `restroomsCache_${locationToUse.lat.toFixed(4)}_${locationToUse.lng.toFixed(4)}`;
+        const cacheTimestampKey = `restroomsCacheTimestamp_${locationToUse.lat.toFixed(4)}_${locationToUse.lng.toFixed(4)}`;
+        const cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours
+        
         setLoadingRestrooms(true);
         setRestroomError(null);
         try {
-          // 为不同位置使用不同的缓存键，避免缓存冲突
-          const cacheKey = `restroomsCache_${locationToUse.lat.toFixed(4)}_${locationToUse.lng.toFixed(4)}`;
-          const cacheTimestampKey = `restroomsCacheTimestamp_${locationToUse.lat.toFixed(4)}_${locationToUse.lng.toFixed(4)}`;
-          const cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours
 
           const cachedData = localStorage.getItem(cacheKey);
           const cachedTimestamp = localStorage.getItem(cacheTimestampKey);
@@ -317,7 +318,7 @@ export default function TransitApp() {
             } else {
               console.log('Using real restroom data from API (contains ' + restroomsData.length + ' entries)');
               // 确保返回的数据结构正确，每个厕所对象都有必要的字段
-              restroomsData = restroomsData.map(restroom => ({
+              restroomsData = restroomsData.map((restroom: Restroom) => ({
                 ...restroom,
                 id: restroom.id || `restroom-${Math.random().toString(36).substr(2, 9)}`,
                 name: restroom.name || restroom.tags?.name || restroom.address,
@@ -333,7 +334,7 @@ export default function TransitApp() {
             // 缓存处理逻辑
             try {
               // 判断是否为模拟数据
-              const isMockData = restroomsData.length <= 3 && restroomsData.some(r => r.id?.startsWith('mock-'));
+              const isMockData = restroomsData.length <= 3 && restroomsData.some((r: Restroom) => r.id?.startsWith('mock-'));
               
               // 缓存策略: 
               // 1. 非模拟数据且记录超过0条，或者测试模式下有实际数据时缓存

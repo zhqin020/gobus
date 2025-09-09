@@ -22,13 +22,15 @@ interface StopInfoPanelProps {
 
 export default function StopInfoPanel({ stop, routes, onClose }: StopInfoPanelProps) {
   const controls = useAnimation()
+  
+  // 定义面板位置常量
+  const panelPositions = {
+    middle: typeof window !== "undefined" ? window.innerHeight * 0.6 : 540
+  }
 
   // 设置默认停靠在屏幕中间
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const middle = window.innerHeight * 0.6
-      controls.start({ y: middle })
-    }
+    controls.start({ y: panelPositions.middle })
   }, [controls])
 
   const onDragEnd = (event: any, info: any) => {
