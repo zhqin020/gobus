@@ -976,13 +976,13 @@ export default function TransitApp() {
                 />
                 <div className="max-h-40 overflow-auto bg-gray-800 rounded-md border border-gray-700">
                   {Array.isArray(addressSearchResults) && addressSearchResults.length > 0 ? (
-                    addressSearchResults.map((addr) => (
+                    addressSearchResults.map((addr, index) => (
                       <div
-                        key={addr}
+                        key={index}
                         className="p-2 cursor-pointer hover:bg-green-700 text-white"
                         onClick={() => handleAddressSelect(addr)}
                       >
-                        {addr}
+                        {typeof addr === 'string' ? addr : addr.address || JSON.stringify(addr)}
                       </div>
                     ))
                   ) : (
