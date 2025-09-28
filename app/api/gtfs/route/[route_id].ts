@@ -31,8 +31,9 @@ export async function GET(req: NextRequest, { params }: { params: { route_id: st
   console.log('[DEBUG] Bypassing cache for route:', route_id);
   gtfsCache.clear(`route_${route_id}`);
 
+  let db: any;
   try {
-    const db = await open({
+    db = await open({
       filename: 'data/gtfs.sqlite',
       driver: sqlite3.Database,
     });
@@ -126,5 +127,15 @@ export async function GET(req: NextRequest, { params }: { params: { route_id: st
   } catch (error) {
     console.error('Database connection error:', error);
     return NextResponse.json({ error: 'Failed to connect to database' }, { status: 500 });
+  } finally {
+    // Always close the database connection
+    if (db) {
+      try {
+        await db.close();
+        console.log('[API] Database connection closed');
+      } catch (closeError) {
+        console.error('[API] Error closing database:', closeError);
+      }
+    }
   }
 }

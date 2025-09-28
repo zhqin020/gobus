@@ -723,6 +723,7 @@ async function updateRestroomsInDB(db: any, restrooms: any[]): Promise<void> {
 }
 
 export async function GET(req: Request) {
+  let db: any = null; // 初始化db为null
   try {
     const url = new URL(req.url);
     const lat = url.searchParams.get('lat');
@@ -763,14 +764,33 @@ export async function GET(req: Request) {
       }
     }
     
-    // 打开数据库
-    const db = await open({
-      filename: DB_PATH as string,
-      driver: sqlite3.Database
-    });
+    // 打开数据库，添加重试机制
+    let retryCount = 0;
+    const maxRetries = 3;
     
-    if (!db) {
-      throw new Error('Failed to open database');
+    while (retryCount < maxRetries) {
+      try {
+        db = await open({
+          filename: DB_PATH as string,
+          driver: sqlite3.Database
+        });
+        
+        if (!db) {
+          throw new Error('Failed to open database');
+        }
+        break; // 成功打开数据库，退出重试循环
+      } catch (error: any) {
+        retryCount++;
+        if (error.message && error.message.includes('SQLITE_BUSY')) {
+          console.log(`[Restroom API] Database busy, retry ${retryCount}/${maxRetries}`);
+          if (retryCount < maxRetries) {
+            // 等待一段时间后重试
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+            continue;
+          }
+        }
+        throw error;
+      }
     }
     
     let versionInfo: { restroomVersion?: number } = {};
@@ -913,8 +933,6 @@ export async function GET(req: Request) {
       ];
     }
     
-    db.close();
-    
     // 保存到文件缓存
     try {
       if (!fs.existsSync(CACHE_DIR)) {
@@ -932,5 +950,15 @@ export async function GET(req: Request) {
   } catch (error) {
     console.error(`[Restroom API] Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
     return NextResponse.json({ error: 'Failed to fetch restrooms data' }, { status: 500 });
+  } finally {
+    // Always close the database connection
+    if (db) {
+      try {
+        await db.close();
+        console.log('[Restroom API] Database connection closed');
+      } catch (closeError) {
+        console.error('[Restroom API] Error closing database:', closeError);
+      }
+    }
   }
 }
